@@ -1,0 +1,690 @@
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Platform,
+  Dimensions,
+} from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  withRepeat,
+  withSequence,
+  FadeIn,
+  FadeOut,
+  interpolate,
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import COLORS from "@/constants/colors";
+import { useAuth } from "@/context/AuthContext";
+import { playTap } from "@/lib/sound";
+
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
+
+interface PanelData {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  gradientColors: [string, string, string];
+  accentColor: string;
+  onPress: () => void;
+  disabled?: boolean;
+}
+
+function FloatingCard({ x, y, rotate, delay, color }: { x: number; y: number; rotate: number; delay: number; color: string }) {
+  const float = useSharedValue(0);
+  const opacity = useSharedValue(0);
+
+  useEffect(() => {
+    opacity.value = withTiming(0.18, { duration: 800 });
+    float.value = withRepeat(
+      withSequence(
+        withTiming(-10, { duration: 2000 + delay }),
+        withTiming(6, { duration: 2000 + delay })
+      ),
+      -1,
+      true
+    );
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateY: float.value }],
+    opacity: opacity.value,
+  }));
+
+  return (
+    <Animated.View style={[{ position: "absolute", left: x, top: y, transform: [{ rotate: `${rotate}deg` }] }, style]}>
+      <View style={[styles.floatingCard, { borderColor: color, shadowColor: color }]}>
+        <Text style={[styles.floatingCardText, { color }]}>♠</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+function Panel({ data, index }: { data: PanelData; index: number }) {
+  const scale = useSharedValue(1);
+  const brightness = useSharedValue(0);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(brightness.value, [0, 1], [0, 0.12]),
+  }));
+
+  const handlePressIn = () => {
+    if (data.disabled) return;
+    scale.value = withSpring(0.97, { damping: 20 });
+    brightness.value = withTiming(1, { duration: 150 });
+  };
+
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 20 });
+    brightness.value = withTiming(0, { duration: 200 });
+  };
+
+  return (
+    <Animated.View
+      entering={FadeIn.delay(index * 80).duration(500)}
+      style={[styles.panelOuter, animStyle]}
+    >
+      <Pressable
+        onPress={data.disabled ? undefined : () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          data.onPress();
+        }}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={styles.panelPressable}
+      >
+        <LinearGradient
+          colors={data.gradientColors}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+        />
+
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: data.accentColor }, glowStyle]} />
+
+        <View style={styles.panelDividerRight} />
+
+        <View style={styles.panelContent}>
+          <View style={[styles.panelIconRing, { borderColor: `${data.accentColor}60`, shadowColor: data.accentColor }]}>
+            {data.icon}
+            {data.disabled && (
+              <View style={styles.panelLockBadge}>
+                <Ionicons name="lock-closed" size={9} color="#fff" />
+              </View>
+            )}
+          </View>
+
+          <Text style={[styles.panelTitle, { color: data.accentColor, textShadowColor: data.accentColor }]}>
+            {data.title}
+          </Text>
+          <Text style={styles.panelSubtitle}>{data.subtitle}</Text>
+
+          {data.disabled && (
+            <View style={[styles.comingSoonBadge, { borderColor: `${data.accentColor}40` }]}>
+              <Text style={[styles.comingSoonText, { color: data.accentColor }]}>SOON</Text>
+            </View>
+          )}
+          {!data.disabled && (
+            <View style={[styles.panelArrow, { borderColor: `${data.accentColor}60` }]}>
+              <Ionicons name="arrow-forward" size={14} color={data.accentColor} />
+            </View>
+          )}
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+interface PlayerMenuProps {
+  visible: boolean;
+  onClose: () => void;
+  topInset: number;
+}
+
+function PlayerMenu({ visible, onClose, topInset }: PlayerMenuProps) {
+  const { user } = useAuth();
+  const displayName =
+    user?.user_metadata?.display_name ??
+    user?.email?.split("@")[0] ??
+    "Guest";
+
+  const menuItems = [
+    {
+      id: "username",
+      label: "Username",
+      subtitle: displayName,
+      icon: "person-outline" as const,
+        onPress: () => {
+        onClose();
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        router.push("/profile");
+      },
+    },
+    {
+      id: "past-games",
+      label: "Past Games",
+      subtitle: "View game history",
+      icon: "time-outline" as const,
+      onPress: () => {
+        onClose();
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        router.push("/past-games");
+      },
+    },
+    {
+      id: "statistics",
+      label: "Statistics",
+      subtitle: "Win rate & stats",
+      icon: "stats-chart-outline" as const,
+      onPress: () => {
+        onClose();
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        router.push("/statistics");
+      },
+    },
+  ];
+
+  if (!visible) return null;
+
+  return (
+    <>
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+      <Animated.View
+        entering={FadeIn.duration(150)}
+        exiting={FadeOut.duration(100)}
+        style={[styles.playerMenu, { top: topInset + 52, right: 12 }]}
+      >
+        <LinearGradient
+          colors={["#0A1A12", "#06100A", "#040A06"]}
+          style={styles.playerMenuGradient}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+        >
+          {menuItems.map((item) => (
+            <Pressable
+              key={item.id}
+              style={({ pressed }) => [
+                styles.playerMenuItem,
+                pressed && styles.playerMenuItemPressed,
+              ]}
+              onPress={item.onPress}
+            >
+              <View style={styles.playerMenuIconWrap}>
+                <Ionicons name={item.icon} size={18} color={COLORS.gold} />
+              </View>
+              <View style={styles.playerMenuTextWrap}>
+                <Text style={styles.playerMenuLabel}>{item.label}</Text>
+                <Text style={styles.playerMenuSubtitle} numberOfLines={1}>
+                  {item.subtitle}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
+            </Pressable>
+          ))}
+        </LinearGradient>
+      </Animated.View>
+    </>
+  );
+}
+
+export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
+  const topInset = Platform.OS === "web" ? 67 : insets.top;
+  const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
+  const [playerMenuVisible, setPlayerMenuVisible] = useState(false);
+
+  const shimmer = useSharedValue(0);
+  useEffect(() => {
+    shimmer.value = withRepeat(withTiming(1, { duration: 3000 }), -1, true);
+  }, []);
+
+  const titleShimmerStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(shimmer.value, [0, 0.5, 1], [0.85, 1, 0.85]),
+  }));
+
+  const panels: PanelData[] = [
+    {
+      id: "vs",
+      title: "VS SYSTEM",
+      subtitle: "VS BOTS",
+      icon: <FontAwesome5 name="robot" size={28} color={COLORS.orange} />,
+      gradientColors: ["#1A0D00", "#0E0800", "#060300"],
+      accentColor: COLORS.orange,
+      onPress: () => {
+        playTap();
+        router.push("/vs-setup");
+      },
+    },
+    {
+      id: "multi",
+      title: "MULTIPLAYER",
+      subtitle: "LOCAL ROOM",
+      icon: <Ionicons name="people" size={28} color={COLORS.blue} />,
+      gradientColors: ["#00101F", "#000A14", "#000509"],
+      accentColor: COLORS.blue,
+      onPress: () => {
+        playTap();
+        router.push("/room");
+      },
+    },
+    {
+      id: "online",
+      title: "ONLINE",
+      subtitle: "RANKED PLAY",
+      icon: <Ionicons name="globe" size={28} color={COLORS.purple} />,
+      gradientColors: ["#0A0014", "#06000D", "#030007"],
+      accentColor: COLORS.purple,
+      onPress: () => {
+        playTap();
+        router.push("/online");
+      },
+    },
+    {
+      id: "how",
+      title: "HOW TO PLAY",
+      subtitle: "RULES & TIPS",
+      icon: <MaterialCommunityIcons name="book-open-page-variant" size={28} color={COLORS.gold} />,
+      gradientColors: ["#0A0900", "#060600", "#030300"],
+      accentColor: COLORS.gold,
+      onPress: () => {
+        playTap();
+        router.push("/how-to-play");
+      },
+    },
+  ];
+
+  return (
+    <View style={styles.root}>
+      <LinearGradient
+        colors={["#020905", "#050F08", "#060F0A"]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
+
+      {/* Ambient glow spots */}
+      <View style={[styles.glowSpot, { left: "10%", top: "30%", backgroundColor: COLORS.orange }]} />
+      <View style={[styles.glowSpot, { left: "35%", top: "20%", backgroundColor: COLORS.blue }]} />
+      <View style={[styles.glowSpot, { left: "60%", top: "35%", backgroundColor: COLORS.purple }]} />
+      <View style={[styles.glowSpot, { right: "8%", top: "25%", backgroundColor: COLORS.gold }]} />
+
+      {/* Floating decorative cards */}
+      <FloatingCard x={SCREEN_W * 0.03} y={SCREEN_H * 0.15} rotate={-18} delay={200} color={COLORS.orange} />
+      <FloatingCard x={SCREEN_W * 0.22} y={SCREEN_H * 0.6} rotate={12} delay={500} color={COLORS.blue} />
+      <FloatingCard x={SCREEN_W * 0.52} y={SCREEN_H * 0.12} rotate={-8} delay={100} color={COLORS.purple} />
+      <FloatingCard x={SCREEN_W * 0.78} y={SCREEN_H * 0.55} rotate={15} delay={350} color={COLORS.gold} />
+
+      {/* Header */}
+      <Animated.View
+        entering={FadeIn.duration(800)}
+        style={[styles.header, { paddingTop: topInset + 12 }]}
+      >
+        <Pressable
+          style={({ pressed }) => [
+            styles.settingsIconBtn,
+            pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
+          ]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push("/settings");
+          }}
+        >
+          <Ionicons name="settings-outline" size={22} color={COLORS.gold} />
+        </Pressable>
+        <View style={styles.headerCenter}>
+          <Animated.View style={titleShimmerStyle}>
+            <Text style={styles.logoText}>NO-SHOW</Text>
+          </Animated.View>
+          <Text style={styles.logoSub}>THE CARD GAME</Text>
+          <View style={styles.logoDivider} />
+        </View>
+        <Pressable
+          style={({ pressed }) => [
+            styles.playerIconBtn,
+            pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
+          ]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setPlayerMenuVisible((v) => !v);
+          }}
+        >
+          <View style={styles.playerIconInner}>
+            <Text style={styles.playerIconSymbol}>♠</Text>
+          </View>
+        </Pressable>
+      </Animated.View>
+
+      {/* Player menu dropdown (home only) */}
+      {playerMenuVisible && (
+        <View style={styles.playerMenuOverlay} pointerEvents="box-none">
+          <PlayerMenu
+            visible={playerMenuVisible}
+            onClose={() => setPlayerMenuVisible(false)}
+            topInset={topInset}
+          />
+        </View>
+      )}
+
+      {/* 4 Panels */}
+      <View style={[styles.panelsRow, { paddingBottom: bottomInset + 8 }]}>
+        {panels.map((panel, idx) => (
+          <Panel key={panel.id} data={panel} index={idx} />
+        ))}
+      </View>
+
+      {/* Bottom bar */}
+      <Animated.View entering={FadeIn.delay(500)} style={[styles.bottomBar, { bottom: bottomInset + 4 }]}>
+        <View style={styles.bottomChip}>
+          <Ionicons name="people-outline" size={10} color={COLORS.textDim} />
+          <Text style={styles.bottomChipText}>3–4 Players</Text>
+        </View>
+        <View style={styles.bottomDot} />
+        <View style={styles.bottomChip}>
+          <MaterialCommunityIcons name="cards" size={10} color={COLORS.textDim} />
+          <Text style={styles.bottomChipText}>52 Cards</Text>
+        </View>
+        <View style={styles.bottomDot} />
+        <View style={styles.bottomChip}>
+          <Ionicons name="trophy-outline" size={10} color={COLORS.textDim} />
+          <Text style={styles.bottomChipText}>Last under 100</Text>
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: COLORS.bgDeep,
+  },
+  glowSpot: {
+    position: "absolute",
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    opacity: 0.04,
+  },
+  floatingCard: {
+    width: 36,
+    height: 50,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  floatingCardText: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    zIndex: 2,
+  },
+  headerCenter: { alignItems: "center", flex: 1 },
+  settingsIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,215,0,0.08)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,215,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  playerIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,215,0,0.08)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,215,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: COLORS.gold,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  playerIconInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,215,0,0.2)",
+  },
+  playerIconSymbol: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: COLORS.gold,
+  },
+  playerMenuOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+  },
+  playerMenu: {
+    position: "absolute",
+    minWidth: 220,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,215,0,0.25)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.6,
+    shadowRadius: 16,
+    elevation: 16,
+  },
+  playerMenuGradient: {
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  playerMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 12,
+  },
+  playerMenuItemPressed: {
+    backgroundColor: "rgba(255,215,0,0.08)",
+  },
+  playerMenuIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,215,0,0.12)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  playerMenuTextWrap: { flex: 1 },
+  playerMenuLabel: {
+    color: COLORS.gold,
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  playerMenuSubtitle: {
+    color: COLORS.textDim,
+    fontSize: 12,
+    marginTop: 1,
+  },
+  logoText: {
+    color: COLORS.gold,
+    fontSize: 38,
+    fontWeight: "900",
+    letterSpacing: 10,
+    textShadowColor: "rgba(255,215,0,0.5)",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 20,
+  },
+  logoSub: {
+    color: COLORS.textDim,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 5,
+    marginTop: 2,
+  },
+  logoDivider: {
+    width: 40,
+    height: 1.5,
+    backgroundColor: COLORS.gold,
+    opacity: 0.4,
+    marginTop: 10,
+    borderRadius: 1,
+  },
+  panelsRow: {
+    flex: 1,
+    flexDirection: "row",
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  panelOuter: {
+    flex: 1,
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  panelPressable: {
+    flex: 1,
+    position: "relative",
+  },
+  panelDividerRight: {
+    position: "absolute",
+    right: 0,
+    top: "15%",
+    bottom: "15%",
+    width: 0.5,
+    backgroundColor: "rgba(255,255,255,0.07)",
+  },
+  panelContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 20,
+  },
+  panelIconRing: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 1.5,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 8,
+    position: "relative",
+  },
+  panelLockBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "rgba(0,0,0,0.85)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  panelTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    textAlign: "center",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
+  },
+  panelSubtitle: {
+    color: COLORS.textDim,
+    fontSize: 10,
+    fontWeight: "500",
+    letterSpacing: 0.5,
+    textAlign: "center",
+  },
+  comingSoonBadge: {
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginTop: 4,
+  },
+  comingSoonText: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+  },
+  panelArrow: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  bottomBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 6,
+  },
+  bottomChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  bottomChipText: {
+    color: COLORS.textDim,
+    fontSize: 9,
+    fontWeight: "500",
+  },
+  bottomDot: {
+    width: 2,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: COLORS.textDim,
+  },
+});

@@ -1,0 +1,28 @@
+
+> expo-app@1.0.0 server:dev
+> cross-env NODE_ENV=development tsx server/index.ts
+
+[1G[0KServing static Expo files with dynamic manifest routing
+Expo routing: Checking expo-platform header on / and /manifest
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:5000
+[90m    at Server.setupListenHandle [as _listen2] (node:net:1940:16)[39m
+[90m    at listenInCluster (node:net:1997:12)[39m
+[90m    at node:net:2206:7[39m
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)[39m
+Emitted 'error' event on WebSocketServer instance at:
+[90m    at Server.emit (node:events:519:28)[39m
+[90m    at emitErrorNT (node:net:1976:8)[39m
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)[39m {
+  code: [32m'EADDRINUSE'[39m,
+  errno: [33m-98[39m,
+  syscall: [32m'listen'[39m,
+  address: [32m'0.0.0.0'[39m,
+  port: [33m5000[39m
+}
+
+Node.js v22.22.0
+[1G[0K⠙[1G[0K
