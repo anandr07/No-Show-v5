@@ -736,15 +736,17 @@ export default function GameScreen() {
           <Ionicons name="close" size={16} color={COLORS.textMuted} />
         </Pressable>
 
-        <View style={styles.topCenter}>
-          <View style={styles.roundPill}>
-            <Text style={styles.roundPillText}>ROUND {state.round}</Text>
-          </View>
-        </View>
+        <View style={styles.topCenter} />
 
-        <Pressable style={styles.iconBtn} onPress={() => setShowScoreModal(true)}>
-          <Ionicons name="stats-chart" size={16} color={COLORS.gold} />
-        </Pressable>
+        <View style={styles.topBarRight}>
+          <View style={styles.roundBadge} accessibilityLabel={`Round ${state.round}`}>
+            <MaterialCommunityIcons name="counter" size={15} color={COLORS.gold} />
+            <Text style={styles.roundBadgeText}>{state.round}</Text>
+          </View>
+          <Pressable style={styles.iconBtn} onPress={() => setShowScoreModal(true)}>
+            <Ionicons name="stats-chart" size={16} color={COLORS.gold} />
+          </Pressable>
+        </View>
       </View>
 
       {/* ── CARD FLIGHT ANIMATIONS (throw / pick-discard / pick-deck) ── */}
@@ -1381,21 +1383,29 @@ const styles = StyleSheet.create({
   },
   topCenter: {
     flex: 1,
+  },
+  topBarRight: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 8,
   },
-  roundPill: {
-    backgroundColor: "rgba(0,0,0,0.6)",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 4,
+  roundBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 17,
+    backgroundColor: "rgba(0,0,0,0.55)",
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: "rgba(255,255,255,0.1)",
   },
-  roundPillText: {
+  roundBadgeText: {
     color: COLORS.gold,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
-    letterSpacing: 2,
+    minWidth: 14,
+    textAlign: "center",
   },
 
   // ── FLIGHT CARD (face-up) ──

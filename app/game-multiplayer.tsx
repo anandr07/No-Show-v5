@@ -509,9 +509,15 @@ export default function GameMultiplayerScreen() {
           <Ionicons name="close" size={18} color={COLORS.textMuted} />
         </Pressable>
         <View style={styles.topCenter} />
-        <Pressable style={styles.iconBtn} onPress={() => setShowScoreModal(true)}>
-          <Ionicons name="stats-chart" size={18} color={COLORS.gold} />
-        </Pressable>
+        <View style={styles.topBarRight}>
+          <View style={styles.roundBadge} accessibilityLabel={`Round ${state.round}`}>
+            <MaterialCommunityIcons name="counter" size={15} color={COLORS.gold} />
+            <Text style={styles.roundBadgeText}>{state.round}</Text>
+          </View>
+          <Pressable style={styles.iconBtn} onPress={() => setShowScoreModal(true)}>
+            <Ionicons name="stats-chart" size={18} color={COLORS.gold} />
+          </Pressable>
+        </View>
       </View>
 
       {/* Scoreboard overlay (avoids Modal+Reanimated crash) */}
@@ -868,7 +874,30 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 6,
   },
-  topCenter: { flex: 1, alignItems: "center", gap: 3 },
+  topCenter: { flex: 1 },
+  topBarRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  roundBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 17,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  roundBadgeText: {
+    color: COLORS.gold,
+    fontSize: 12,
+    fontWeight: "800",
+    minWidth: 14,
+    textAlign: "center",
+  },
   modalBg: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.82)",
