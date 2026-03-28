@@ -33,7 +33,7 @@ function RootLayoutNav() {
       <Stack.Screen name="room" />
       <Stack.Screen name="online" />
       <Stack.Screen name="online-queue" />
-      <Stack.Screen name="online-match" />
+      <Stack.Screen name="game-online" />
       <Stack.Screen name="leaderboard" />
       <Stack.Screen name="levels-map" />
       <Stack.Screen name="how-points" />

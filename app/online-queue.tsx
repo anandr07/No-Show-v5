@@ -26,12 +26,15 @@ export default function OnlineQueueScreen() {
 
   useEffect(() => {
     if (phase === "playing") {
-      router.replace("/online-match");
+      router.replace("/game-online");
     }
   }, [phase]);
 
   const label = useMemo(
-    () => (mode === "online_3p" ? "VS 3 Players" : "VS 2 Players"),
+    () =>
+      mode === "online_3p"
+        ? "VS 3 Players (4 at table)"
+        : "VS 2 Players (3 at table)",
     [mode]
   );
   const capped = Math.min(180, elapsed);

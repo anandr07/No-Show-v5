@@ -215,7 +215,7 @@ export default function OnlineScreen() {
                 <MaterialCommunityIcons name="account-group-outline" size={24} color={COLORS.gold} />
                 <View style={styles.modeTextWrap}>
                   <Text style={[styles.modeTitle, { fontSize: mScale(16, 0.5, 14, 19) }]}>VS 2 Players</Text>
-                  <Text style={[styles.modeSub, { fontSize: mScale(12, 0.5, 11, 14) }]}>Fast 1v1 ranked battle</Text>
+                  <Text style={[styles.modeSub, { fontSize: mScale(12, 0.5, 11, 14) }]}>3 players total — global matchmaking</Text>
                 </View>
                 <Ionicons name="arrow-forward-circle" size={24} color={COLORS.gold} />
               </View>
@@ -227,7 +227,7 @@ export default function OnlineScreen() {
                 <MaterialCommunityIcons name="account-multiple-outline" size={24} color={COLORS.primary} />
                 <View style={styles.modeTextWrap}>
                   <Text style={[styles.modeTitle, { fontSize: mScale(16, 0.5, 14, 19) }]}>VS 3 Players</Text>
-                  <Text style={[styles.modeSub, { fontSize: mScale(12, 0.5, 11, 14) }]}>Higher strategy ranked match</Text>
+                  <Text style={[styles.modeSub, { fontSize: mScale(12, 0.5, 11, 14) }]}>4 players total — global matchmaking</Text>
                 </View>
                 <Ionicons name="arrow-forward-circle" size={24} color={COLORS.primary} />
               </View>

@@ -24,16 +24,29 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useGame } from "@/context/GameContext";
 import { useMultiplayerGame } from "@/context/MultiplayerGameContext";
+import { useOnlineGame } from "@/context/OnlineGameContext";
 import COLORS, { AVATAR_COLORS } from "@/constants/colors";
 import { playSuccess } from "@/lib/sound";
 
 export default function ResultsScreen() {
   const vsGame = useGame();
   const multiplayer = useMultiplayerGame();
+  const online = useOnlineGame();
 
-  const isMultiplayer = multiplayer.gameState?.phase === "gameOver";
-  const state = isMultiplayer ? multiplayer.gameState! : vsGame.state;
-  const resetGame = isMultiplayer ? multiplayer.quitGame : vsGame.resetGame;
+  const isOnlineResults =
+    online.state?.phase === "gameOver" && online.matchId != null;
+  const isMultiplayer =
+    !isOnlineResults && multiplayer.gameState?.phase === "gameOver";
+  const state = isOnlineResults
+    ? online.state!
+    : isMultiplayer
+      ? multiplayer.gameState!
+      : vsGame.state;
+  const resetGame = isOnlineResults
+    ? online.resetOnline
+    : isMultiplayer
+      ? multiplayer.quitGame
+      : vsGame.resetGame;
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
@@ -61,7 +74,10 @@ export default function ResultsScreen() {
 
   const handlePlayAgain = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (isMultiplayer) {
+    if (isOnlineResults) {
+      online.resetOnline();
+      router.replace("/online");
+    } else if (isMultiplayer) {
       multiplayer.resetToLobby();
       router.replace("/room");
     } else {
@@ -72,7 +88,10 @@ export default function ResultsScreen() {
 
   const handleHome = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (isMultiplayer) {
+    if (isOnlineResults) {
+      online.resetOnline();
+      router.replace("/");
+    } else if (isMultiplayer) {
       multiplayer.quitGame();
     } else {
       resetGame();

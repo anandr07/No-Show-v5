@@ -238,7 +238,8 @@ export class OnlineMatchmakingService {
   }
 
   private async tryMatch(mode: Mode) {
-    const required = mode === "online_2p" ? 2 : 3;
+    // online_2p = 3 players total (you + 2), online_3p = 4 players total (you + 3)
+    const required = mode === "online_2p" ? 3 : 4;
     const entries = this.queue.filter((q) => q.mode === mode);
     if (entries.length < required) return;
 
@@ -262,7 +263,7 @@ export class OnlineMatchmakingService {
         continue;
       }
 
-      const required = mode === "online_2p" ? 2 : 3;
+      const required = mode === "online_2p" ? 3 : 4;
       const humanCount = Math.min(required, queueForMode.length);
       const selected = queueForMode.slice(0, humanCount);
       selected.forEach((s) => this.removeFromQueueByWs(s.ws));
@@ -271,7 +272,7 @@ export class OnlineMatchmakingService {
   }
 
   private async startMatch(mode: Mode, humans: QueueEntry[], allowBots: boolean) {
-    const required = mode === "online_2p" ? 2 : 3;
+    const required = mode === "online_2p" ? 3 : 4;
     const matchId = randomUUID();
     const players: OnlinePlayer[] = humans.map((h) => ({
       id: randomUUID(),

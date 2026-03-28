@@ -1,4 +1,12 @@
-import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { GameState, Card } from "@/lib/gameEngine";
 import { getWebSocketUrl } from "@/lib/query-client";
@@ -23,11 +31,21 @@ interface OnlineGameContextValue {
   isBotFilled: boolean;
   error: string;
   queueStartedAt: number | null;
+  selectedCards: string[];
 
   joinQueue: (mode: QueueMode, playerName: string) => Promise<void>;
   cancelQueue: () => void;
   sendOnlineAction: (action: object) => void;
   resetOnline: () => void;
+  clearError: () => void;
+  selectCard: (cardId: string) => void;
+  deselectCard: (cardId: string) => void;
+  clearSelection: () => void;
+  throwSelectedCards: () => void;
+  pickFromDeck: () => void;
+  pickFromThrown: (card: Card) => void;
+  callShow: () => void;
+  nextRound: () => void;
 }
 
 const STORAGE_ONLINE_USER_ID = "@noshow/online_user_id";
@@ -52,6 +70,7 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
   const [error, setError] = useState("");
   const [isBotFilled, setIsBotFilled] = useState(false);
   const [queueStartedAt, setQueueStartedAt] = useState<number | null>(null);
+  const [selectedCards, setSelectedCards] = useState<string[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -81,11 +100,13 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
       setState((msg.state as GameState) ?? null);
       setIsBotFilled(Boolean(msg.isBotFilled));
       setError("");
+      setSelectedCards([]);
       return;
     }
 
     if (msg.type === "ONLINE_STATE_UPDATE") {
       setState((msg.state as GameState) ?? null);
+      setError("");
       return;
     }
 
@@ -116,12 +137,10 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
     };
     ws.onerror = () => setError("Cannot reach online server.");
     ws.onclose = () => {
-      if (phase !== "finished") {
-        setPhase((prev) => (prev === "idle" ? "idle" : "idle"));
-      }
+      setPhase((prev) => (prev === "finished" ? "finished" : "idle"));
     };
     return ws;
-  }, [handleMessage, phase]);
+  }, [handleMessage]);
 
   const joinQueue = useCallback(async (queueMode: QueueMode, playerName: string) => {
     setError("");
@@ -162,6 +181,55 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
     );
   }, []);
 
+  const clearError = useCallback(() => setError(""), []);
+
+  const selectCard = useCallback((cardId: string) => {
+    setSelectedCards((prev) => (prev.includes(cardId) ? prev : [...prev, cardId]));
+  }, []);
+
+  const deselectCard = useCallback((cardId: string) => {
+    setSelectedCards((prev) => prev.filter((id) => id !== cardId));
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedCards([]), []);
+
+  const throwSelectedCards = useCallback(() => {
+    if (!state || !playerId) return;
+    const myIndex = state.players.findIndex((p) => p.id === playerId);
+    if (myIndex < 0) return;
+    const player = state.players[myIndex];
+    const cards = player.hand.filter((c) => selectedCards.includes(c.id));
+    if (cards.length === 0) return;
+    sendOnlineAction({ type: "THROW_CARDS", cards });
+    setSelectedCards([]);
+  }, [state, playerId, selectedCards, sendOnlineAction]);
+
+  const pickFromDeck = useCallback(() => {
+    sendOnlineAction({ type: "PICK_FROM_DECK" });
+  }, [sendOnlineAction]);
+
+  const pickFromThrown = useCallback(
+    (card: Card) => {
+      sendOnlineAction({ type: "PICK_FROM_THROWN", cardId: card.id });
+    },
+    [sendOnlineAction]
+  );
+
+  const callShow = useCallback(() => {
+    sendOnlineAction({ type: "CALL_SHOW" });
+  }, [sendOnlineAction]);
+
+  const nextRound = useCallback(() => {
+    sendOnlineAction({ type: "NEXT_ROUND" });
+  }, [sendOnlineAction]);
+
+  useEffect(() => {
+    if (!state || !playerId) return;
+    const me = state.players.find((p) => p.id === playerId);
+    const handIds = new Set((me?.hand ?? []).map((c) => c.id));
+    setSelectedCards((prev) => prev.filter((id) => handIds.has(id)));
+  }, [state, playerId]);
+
   const resetOnline = useCallback(() => {
     closeSocket();
     setPhase("idle");
@@ -173,6 +241,7 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
     setError("");
     setQueueStartedAt(null);
     setIsBotFilled(false);
+    setSelectedCards([]);
   }, [closeSocket]);
 
   const value = useMemo<OnlineGameContextValue>(
@@ -187,10 +256,20 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
       isBotFilled,
       error,
       queueStartedAt,
+      selectedCards,
       joinQueue,
       cancelQueue,
       sendOnlineAction,
       resetOnline,
+      clearError,
+      selectCard,
+      deselectCard,
+      clearSelection,
+      throwSelectedCards,
+      pickFromDeck,
+      pickFromThrown,
+      callShow,
+      nextRound,
     }),
     [
       phase,
@@ -203,10 +282,20 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
       isBotFilled,
       error,
       queueStartedAt,
+      selectedCards,
       joinQueue,
       cancelQueue,
       sendOnlineAction,
       resetOnline,
+      clearError,
+      selectCard,
+      deselectCard,
+      clearSelection,
+      throwSelectedCards,
+      pickFromDeck,
+      pickFromThrown,
+      callShow,
+      nextRound,
     ]
   );
 
