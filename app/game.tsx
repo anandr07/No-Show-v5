@@ -31,6 +31,9 @@ import { router } from "expo-router";
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
+import { Image } from "expo-image";
+
+const GAME_TABLE_BACKGROUND = require("@/assets/images/game-table-background.png");
 
 import { useGame } from "@/context/GameContext";
 import { useAuth } from "@/context/AuthContext";
@@ -567,32 +570,15 @@ export default function GameScreen() {
 
   return (
     <View style={styles.root}>
-      {/* ── 3D TABLE BACKGROUND ── */}
+      {/* ── TABLE BACKGROUND (full-screen art) ── */}
       <View style={styles.tableBackground}>
-        <LinearGradient
-          colors={[COLORS.bgDeep, COLORS.tableDark, COLORS.tableMid]}
+        <Image
+          source={GAME_TABLE_BACKGROUND}
           style={StyleSheet.absoluteFill}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
+          contentFit="cover"
+          transition={0}
         />
-        {/* Perspective felt surface */}
-        <View style={styles.feltSurface}>
-          <LinearGradient
-            colors={[COLORS.felt, COLORS.feltLight, COLORS.felt, COLORS.tableDark]}
-            style={StyleSheet.absoluteFill}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-          />
-          {/* Felt texture lines */}
-          <View style={styles.feltLine1} />
-          <View style={styles.feltLine2} />
-          {/* Gold border */}
-          <View style={styles.feltGoldBorder} />
-          {/* Center glow */}
-          <View style={styles.feltCenterGlow} />
-          {/* Vignette */}
-          <View style={styles.feltVignette} pointerEvents="none" />
-        </View>
+        <View style={styles.tableBgDim} pointerEvents="none" />
       </View>
 
       {/* ── GAME CONTENT ── */}
@@ -1029,64 +1015,15 @@ const styles = StyleSheet.create({
     color: COLORS.gold, fontSize: 20, fontWeight: "700", letterSpacing: 3,
   },
 
-  // ── 3D TABLE ──
+  // ── TABLE BACKGROUND ──
   tableBackground: {
     ...StyleSheet.absoluteFillObject,
     overflow: "hidden",
   },
-  feltSurface: {
-    position: "absolute",
-    top: "10%",
-    left: "-5%",
-    right: "-5%",
-    bottom: "-5%",
-    borderRadius: 40,
-    overflow: "hidden",
-    transform: [{ perspective: 1200 }, { rotateX: "8deg" }],
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.6,
-    shadowRadius: 30,
-    elevation: 20,
-  },
-  feltLine1: {
-    position: "absolute",
-    top: "35%",
-    left: "5%",
-    right: "5%",
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 1,
-  },
-  feltLine2: {
-    position: "absolute",
-    top: "65%",
-    left: "5%",
-    right: "5%",
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 1,
-  },
-  feltGoldBorder: {
-    position: "absolute",
-    top: 8, left: 8, right: 8, bottom: 8,
-    borderRadius: 36,
-    borderWidth: 2,
-    borderColor: "rgba(255,215,0,0.18)",
-  },
-  feltCenterGlow: {
-    position: "absolute",
-    top: "25%", left: "25%", right: "25%", bottom: "25%",
-    borderRadius: 200,
-    backgroundColor: "rgba(255,255,255,0.03)",
-  },
-  feltVignette: {
-    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: "transparent",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
+  /** Slight vignette so cards and UI stay readable on the photo. */
+  tableBgDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.14)",
   },
 
   // ── GAME CONTENT ──

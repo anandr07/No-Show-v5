@@ -5,18 +5,33 @@ import {
   StyleSheet,
   Pressable,
   ScrollView,
-  Modal,
   Platform,
   Alert,
 } from "react-native";
-import Animated, { FadeIn, FadeOut, ZoomIn } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  FadeOut,
+  ZoomIn,
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  interpolate,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
+import { Image } from "expo-image";
 
+import { useAuth } from "@/context/AuthContext";
+import { useSettings } from "@/context/SettingsContext";
 import { useMultiplayerGame } from "@/context/MultiplayerGameContext";
+import { PlayerAvatarImage } from "@/components/PlayerAvatarImage";
+import { BotAvatarImage } from "@/components/BotAvatarImage";
+import { resolvePlayerDisplayName } from "@/lib/player-display";
 import { Card, CardBack } from "@/components/Card";
 import { playCardFlip, playTap, playCardDeal, playShow } from "@/lib/sound";
 import {
@@ -27,7 +42,73 @@ import {
 } from "@/lib/gameEngine";
 import COLORS, { AVATAR_COLORS } from "@/constants/colors";
 
+const GAME_TABLE_BACKGROUND = require("@/assets/images/game-table-background.png");
+
+interface OppZoneProps {
+  player: { id: string; name: string; hand: CardType[]; status: string };
+  isTurn: boolean;
+  avatarColor: string;
+  compact?: boolean;
+  isBot?: boolean;
+  botAvatarIndex?: number;
+}
+
+function OppZone({ player, isTurn, avatarColor, compact, isBot, botAvatarIndex = 0 }: OppZoneProps) {
+  const glow = useSharedValue(0);
+
+  useEffect(() => {
+    if (isTurn) {
+      glow.value = withRepeat(
+        withSequence(withTiming(1, { duration: 600 }), withTiming(0.4, { duration: 600 })),
+        -1,
+        true
+      );
+    } else {
+      glow.value = withTiming(0, { duration: 300 });
+    }
+  }, [isTurn]);
+
+  const glowStyle = useAnimatedStyle(() => ({
+    shadowOpacity: interpolate(glow.value, [0, 1], [0, 0.9]),
+    borderColor: isTurn
+      ? `rgba(255,215,0,${interpolate(glow.value, [0, 1], [0.3, 0.9])})`
+      : "rgba(255,255,255,0.15)",
+  }));
+
+  const cardCount = Math.min(player.hand.length, 6);
+  const botImgSize = compact ? 50 : 58;
+
+  return (
+    <View style={compact ? styles.oppZoneCompact : styles.oppZone}>
+      <Animated.View style={[styles.oppAvatarRing, compact && styles.oppAvatarRingCompact, glowStyle]}>
+        {isBot ? (
+          <BotAvatarImage
+            botAvatarIndex={botAvatarIndex}
+            size={botImgSize}
+            borderColor="rgba(0,0,0,0.35)"
+            backgroundColor="rgba(0,0,0,0.35)"
+          />
+        ) : (
+          <View style={[styles.oppAvatar, compact && styles.oppAvatarCompact, { backgroundColor: avatarColor }]}>
+            <Text style={styles.oppInitial}>{player.name[0]?.toUpperCase() ?? "?"}</Text>
+          </View>
+        )}
+        {isTurn && <View style={styles.turnDot} />}
+      </Animated.View>
+      <Text style={styles.oppName} numberOfLines={1}>{player.name}</Text>
+      <View style={styles.oppCardsRow}>
+        {Array.from({ length: cardCount }).map((_, ci) => (
+          <CardBack key={ci} size="small" style={{ marginLeft: ci > 0 ? -18 : 0 }} />
+        ))}
+      </View>
+      <Text style={styles.oppMeta}>{player.hand.length} cards</Text>
+    </View>
+  );
+}
+
 export default function GameMultiplayerScreen() {
+  const { user } = useAuth();
+  const { avatarIndex, displayName: savedDisplayName } = useSettings();
   const {
     gameState: state,
     playerId,
@@ -50,6 +131,18 @@ export default function GameMultiplayerScreen() {
   const [showConfirmShow, setShowConfirmShow] = useState(false);
   const [throwError, setThrowError] = useState("");
   const notifRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const pulse = useSharedValue(1);
+  useEffect(() => {
+    pulse.value = withRepeat(
+      withSequence(withTiming(1.08, { duration: 600 }), withTiming(1, { duration: 600 })),
+      -1,
+      true
+    );
+  }, []);
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulse.value }],
+  }));
 
   useEffect(() => {
     if (state?.phase === "show") setShowReveal(true);
@@ -83,11 +176,19 @@ export default function GameMultiplayerScreen() {
   if (!state || !playerId) {
     return (
       <View style={styles.loadingContainer}>
-        <LinearGradient colors={["#0A2416", "#1B5E35"]} style={StyleSheet.absoluteFill} />
-        <Animated.View entering={ZoomIn}>
+        <View style={styles.tableBackground}>
+          <Image
+            source={GAME_TABLE_BACKGROUND}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            transition={0}
+          />
+          <View style={styles.tableBgDim} pointerEvents="none" />
+        </View>
+        <Animated.View entering={ZoomIn} style={{ zIndex: 1 }}>
           <MaterialCommunityIcons name="cards-playing" size={60} color={COLORS.gold} />
         </Animated.View>
-        <Text style={styles.dealingText}>Loading...</Text>
+        <Text style={[styles.dealingText, { zIndex: 1 }]}>Loading...</Text>
       </View>
     );
   }
@@ -99,6 +200,12 @@ export default function GameMultiplayerScreen() {
 
   const humanPlayer = state.players.find((p) => p.id === playerId);
   const opponents = state.players.filter((p) => p.id !== playerId && p.status === "active");
+  const youRowName = resolvePlayerDisplayName({
+    localName: savedDisplayName,
+    authDisplayName: user?.user_metadata?.display_name,
+    email: user?.email ?? null,
+    fallback: humanPlayer?.name ?? "You",
+  });
   const currentPlayer = state.players[state.currentPlayerIndex];
   const isHumanTurn = currentPlayer?.id === playerId;
   const humanHand = humanPlayer?.hand ?? [];
@@ -183,330 +290,275 @@ export default function GameMultiplayerScreen() {
     ]);
   };
 
-  const renderOpponents = () => {
-    if (opponents.length === 3) {
-      const north = opponents[0];
-      const west = opponents[1];
-      const east = opponents[2];
-      const renderSide = (opp: typeof west) => {
-        const playerIdx = state.players.findIndex((p) => p.id === opp.id);
-        const isTurn = playerIdx === state.currentPlayerIndex;
-        const avatarColor = AVATAR_COLORS[playerIdx % AVATAR_COLORS.length];
-        return (
-          <View key={opp.id} style={styles.oppZoneSide}>
-            <View style={[styles.oppAvatarRing, isTurn && styles.oppAvatarRingActive]}>
-              <View style={[styles.oppAvatar, { backgroundColor: avatarColor }]}>
-                <Text style={styles.oppInitial}>{opp.name[0]}</Text>
-              </View>
-              {isTurn && <View style={styles.turnDot} />}
-            </View>
-            <Text style={styles.oppName} numberOfLines={1}>{opp.name}</Text>
-            <View style={styles.oppCardsRow}>
-              {Array.from({ length: Math.min(opp.hand.length, 6) }).map((_, ci) => (
-                <CardBack key={ci} size="medium" style={[styles.oppCard, { marginLeft: ci > 0 ? -22 : 0 }]} />
-              ))}
-            </View>
-            <Text style={styles.oppMeta}>{opp.hand.length} cards</Text>
-          </View>
-        );
-      };
-      return (
-        <>
-          <View style={styles.oppNorthRow}>
-            {north && (() => {
-              const playerIdx = state.players.findIndex((p) => p.id === north.id);
-              const isTurn = playerIdx === state.currentPlayerIndex;
-              const avatarColor = AVATAR_COLORS[playerIdx % AVATAR_COLORS.length];
-              return (
-                <View key={north.id} style={styles.oppZone}>
-                  <View style={[styles.oppAvatarRing, isTurn && styles.oppAvatarRingActive]}>
-                    <View style={[styles.oppAvatar, { backgroundColor: avatarColor }]}>
-                      <Text style={styles.oppInitial}>{north.name[0]}</Text>
-                    </View>
-                    {isTurn && <View style={styles.turnDot} />}
-                  </View>
-                  <Text style={styles.oppName} numberOfLines={1}>{north.name}</Text>
-                  <View style={styles.oppCardsRow}>
-                    {Array.from({ length: Math.min(north.hand.length, 6) }).map((_, ci) => (
-                      <CardBack key={ci} size="medium" style={[styles.oppCard, { marginLeft: ci > 0 ? -22 : 0 }]} />
-                    ))}
-                  </View>
-                  <Text style={styles.oppMeta}>{north.hand.length} cards</Text>
-                </View>
-              );
-            })()}
-          </View>
-          <View style={styles.centerRow}>
-            <View style={styles.oppWest}>{west && renderSide(west)}</View>
-            <View style={styles.centerContent}>
-              <View style={styles.pickAreaRow}>
-                  <Pressable
-                    onPress={showPickOptions && isHumanTurn ? handlePickFromDeck : undefined}
-                    style={[styles.pileWrap, showPickOptions && isHumanTurn && styles.pileGlow]}
-                  >
-                    {showPickOptions && isHumanTurn && (
-                      <Animated.View entering={ZoomIn} style={styles.pickCardHint}>
-                        <Text style={styles.pickCardHintText}>Pick a Card</Text>
-                      </Animated.View>
-                    )}
-                    <CardBack size="medium" />
-                    <Text style={styles.pileLabel}>DECK</Text>
-                  </Pressable>
-                  <View style={styles.centerDivider}>
-                    <Text style={styles.arrowText}>↔</Text>
-                  </View>
-                  <View style={styles.pileWrap}>
-                    {showPickOptions && isHumanTurn && (
-                      <Animated.View entering={ZoomIn} style={styles.pickCardHint}>
-                        <Text style={styles.pickCardHintText}>Pick a Card</Text>
-                      </Animated.View>
-                    )}
-                    <View style={styles.thrownBox}>
-                      {state.lastThrown.length === 0 ? (
-                        <View style={styles.emptyBox}>
-                          <Text style={styles.emptyBoxText}>—</Text>
-                        </View>
-                      ) : (
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thrownScroll}>
-                          {state.lastThrown.map((card, ci) => (
-                            <Card
-                              key={card.id}
-                              card={card}
-                              size="medium"
-                              style={{ marginLeft: ci > 0 ? -18 : 0 }}
-                              onPress={canPickFromThrown ? () => handlePickFromThrown(card) : undefined}
-                              disabled={!canPickFromThrown}
-                            />
-                          ))}
-                        </ScrollView>
-                      )}
-                    </View>
-                    <Text style={styles.pileLabel}>LAST THROWN</Text>
-                  </View>
-                </View>
-              <View style={styles.thrownRow}>
-                {(isHumanTurn && state.turnPhase === "pick" && (state as { pendingThrown?: CardType[] }).pendingThrown?.length) ? (
-                  <View style={styles.pileWrap}>
-                    <View style={styles.thrownBox}>
-                      <View style={styles.selectedPreviewRow}>
-                        <Text style={styles.arrowText}>→</Text>
-                        {(state as { pendingThrown: CardType[] }).pendingThrown.map((card, ci) => (
-                          <Card key={card.id} card={card} size="medium" style={{ marginLeft: ci > 0 ? -18 : 0 }} />
-                        ))}
-                      </View>
-                    </View>
-                    <Text style={styles.pileLabel}>YOUR THROW</Text>
-                  </View>
-                ) : isHumanTurn && state.turnPhase === "throw" && selectedCards.length > 0 ? (
-                  <View style={styles.pileWrap}>
-                    <View style={styles.thrownBox}>
-                      <View style={styles.selectedPreviewRow}>
-                        <Text style={styles.arrowText}>→</Text>
-                        {humanHand.filter((c) => selectedCards.includes(c.id)).map((card, ci) => (
-                          <Card key={card.id} card={card} size="medium" style={{ marginLeft: ci > 0 ? -18 : 0 }} />
-                        ))}
-                      </View>
-                    </View>
-                    <Text style={styles.pileLabel}>YOUR THROW</Text>
-                  </View>
-                ) : null}
-              </View>
-            </View>
-            <View style={styles.oppEast}>{east && renderSide(east)}</View>
-          </View>
-        </>
-      );
-    }
+  const opp1 = opponents[0];
+  const opp2 = opponents[1];
+  const opp3 = opponents[2];
+  const opp1Idx = opp1 ? state.players.findIndex((p) => p.id === opp1.id) : -1;
+  const opp2Idx = opp2 ? state.players.findIndex((p) => p.id === opp2.id) : -1;
+  const opp3Idx = opp3 ? state.players.findIndex((p) => p.id === opp3.id) : -1;
 
-    return (
-      <>
-        <View style={styles.opponentsRow}>
-          {opponents.map((opp) => {
-            const playerIdx = state.players.findIndex((p) => p.id === opp.id);
-            const isTurn = playerIdx === state.currentPlayerIndex;
-            const avatarColor = AVATAR_COLORS[playerIdx % AVATAR_COLORS.length];
-            return (
-              <View key={opp.id} style={styles.oppZone}>
-                <View style={[styles.oppAvatarRing, isTurn && styles.oppAvatarRingActive]}>
-                  <View style={[styles.oppAvatar, { backgroundColor: avatarColor }]}>
-                    <Text style={styles.oppInitial}>{opp.name[0]}</Text>
-                  </View>
-                  {isTurn && <View style={styles.turnDot} />}
-                </View>
-                <Text style={styles.oppName} numberOfLines={1}>{opp.name}</Text>
-                <View style={styles.oppCardsRow}>
-                  {Array.from({ length: Math.min(opp.hand.length, 6) }).map((_, ci) => (
-                    <CardBack key={ci} size="medium" style={[styles.oppCard, { marginLeft: ci > 0 ? -22 : 0 }]} />
-                  ))}
-                </View>
-                <Text style={styles.oppMeta}>{opp.hand.length} cards</Text>
-              </View>
-            );
-          })}
+  const CenterPiles = () => (
+    <View style={styles.centerPiles}>
+      <View style={styles.pilesRow}>
+        <Pressable
+          onPress={showPickOptions && isHumanTurn ? handlePickFromDeck : undefined}
+          style={styles.pileWrap}
+        >
+          {showPickOptions && isHumanTurn && (
+            <Animated.View style={[styles.pickHintBadge, pulseStyle]}>
+              <Text style={styles.pickHintText}>Tap to Pick</Text>
+            </Animated.View>
+          )}
+          <Animated.View style={showPickOptions && isHumanTurn ? pulseStyle : undefined}>
+            <CardBack size="medium" />
+          </Animated.View>
+          <Text style={styles.pileLabel}>DECK</Text>
+        </Pressable>
+
+        <View style={styles.pileArrow}>
+          <Text style={styles.pileArrowText}>⇄</Text>
         </View>
-        <View style={styles.centerRow}>
-          <View style={styles.pickAreaRow}>
-              <Pressable
-                onPress={showPickOptions && isHumanTurn ? handlePickFromDeck : undefined}
-                style={[styles.pileWrap, showPickOptions && isHumanTurn && styles.pileGlow]}
-              >
-                {showPickOptions && isHumanTurn && (
-                  <Animated.View entering={ZoomIn} style={styles.pickCardHint}>
-                    <Text style={styles.pickCardHintText}>Pick a Card</Text>
-                  </Animated.View>
-                )}
-                <CardBack size="medium" />
-                <Text style={styles.pileLabel}>DECK</Text>
-              </Pressable>
-              <View style={styles.centerDivider}>
-                <Text style={styles.arrowText}>↔</Text>
+
+        <View style={styles.pileWrap}>
+          {showPickOptions && isHumanTurn && canPickFromThrown && (
+            <Animated.View style={[styles.pickHintBadge, pulseStyle]}>
+              <Text style={styles.pickHintText}>Tap to Pick</Text>
+            </Animated.View>
+          )}
+          <View style={styles.thrownBox}>
+            {state.lastThrown.length === 0 ? (
+              <View style={styles.emptyPile}>
+                <Text style={styles.emptyPileText}>Empty</Text>
               </View>
-              <View style={styles.pileWrap}>
-                {showPickOptions && isHumanTurn && (
-                  <Animated.View entering={ZoomIn} style={styles.pickCardHint}>
-                    <Text style={styles.pickCardHintText}>Pick a Card</Text>
-                  </Animated.View>
-                )}
-                <View style={styles.thrownBox}>
-                  {state.lastThrown.length === 0 ? (
-                    <View style={styles.emptyBox}>
-                      <Text style={styles.emptyBoxText}>—</Text>
-                    </View>
-                  ) : (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thrownScroll}>
-                      {state.lastThrown.map((card, ci) => (
-                        <Card
-                          key={card.id}
-                          card={card}
-                          size="medium"
-                          style={{ marginLeft: ci > 0 ? -18 : 0 }}
-                          onPress={canPickFromThrown ? () => handlePickFromThrown(card) : undefined}
-                          disabled={!canPickFromThrown}
-                        />
-                      ))}
-                    </ScrollView>
-                  )}
-                </View>
-                <Text style={styles.pileLabel}>LAST THROWN</Text>
-              </View>
-            </View>
-          <View style={styles.thrownRow}>
-            {(isHumanTurn && state.turnPhase === "pick" && (state as { pendingThrown?: CardType[] }).pendingThrown?.length) ? (
-              <View style={styles.pileWrap}>
-                <View style={styles.thrownBox}>
-                  <View style={styles.selectedPreviewRow}>
-                    <Text style={styles.arrowText}>→</Text>
-                    {(state as { pendingThrown: CardType[] }).pendingThrown.map((card, ci) => (
-                      <Card key={card.id} card={card} size="medium" style={{ marginLeft: ci > 0 ? -18 : 0 }} />
-                    ))}
-                  </View>
-                </View>
-                <Text style={styles.pileLabel}>YOUR THROW</Text>
-              </View>
-            ) : isHumanTurn && state.turnPhase === "throw" && selectedCards.length > 0 ? (
-              <View style={styles.pileWrap}>
-                <View style={styles.thrownBox}>
-                  <View style={styles.selectedPreviewRow}>
-                    <Text style={styles.arrowText}>→</Text>
-                    {humanHand.filter((c) => selectedCards.includes(c.id)).map((card, ci) => (
-                      <Card key={card.id} card={card} size="medium" style={{ marginLeft: ci > 0 ? -18 : 0 }} />
-                    ))}
-                  </View>
-                </View>
-                <Text style={styles.pileLabel}>YOUR THROW</Text>
-              </View>
-            ) : null}
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.thrownScroll}>
+                {state.lastThrown.map((card, ci) => (
+                  <Card
+                    key={card.id}
+                    card={card}
+                    size="medium"
+                    style={{ marginLeft: ci > 0 ? -20 : 0 }}
+                    onPress={canPickFromThrown ? () => handlePickFromThrown(card) : undefined}
+                    disabled={!canPickFromThrown}
+                  />
+                ))}
+              </ScrollView>
+            )}
           </View>
+          <Text style={styles.pileLabel}>THROWN</Text>
         </View>
-      </>
-    );
-  };
+      </View>
+
+      {!isHumanTurn && currentPlayer && (
+        <Animated.View entering={FadeIn} style={styles.botThinkingBadge}>
+          <Ionicons name="hourglass-outline" size={12} color={COLORS.textMuted} />
+          <Text style={styles.botThinkingText}>
+            {`${currentPlayer.name}'s turn…`}
+          </Text>
+        </Animated.View>
+      )}
+    </View>
+  );
 
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={["#0A2416", "#133D24", "#1B5E35"]}
-        style={StyleSheet.absoluteFill}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      />
+      <View style={styles.tableBackground}>
+        <Image
+          source={GAME_TABLE_BACKGROUND}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          transition={0}
+        />
+        <View style={styles.tableBgDim} pointerEvents="none" />
+      </View>
 
-      <View style={[styles.tableArea, { paddingTop: topInset, paddingBottom: bottomInset, paddingLeft: leftInset, paddingRight: rightInset }]}>
-        <View style={styles.feltOval}>
-          <LinearGradient
-            colors={["rgba(0,0,0,0.15)", "transparent", "rgba(255,255,255,0.08)"]}
-            style={StyleSheet.absoluteFill}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-          />
+      <View style={[styles.gameContent, {
+        paddingTop: topInset + 36,
+        paddingBottom: bottomInset + 4,
+        paddingLeft: leftInset + 8,
+        paddingRight: rightInset + 8,
+      }]}>
+
+        {opponents.length === 1 && opp1 && (
+          <View style={styles.oppNorthSingle}>
+            <OppZone
+              player={opp1}
+              isTurn={opp1Idx === state.currentPlayerIndex}
+              avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]}
+              isBot={false}
+            />
+          </View>
+        )}
+
+        {opponents.length === 2 && (
+          <View style={styles.oppNorthRow}>
+            {opp1 && (
+              <OppZone
+                player={opp1}
+                isTurn={opp1Idx === state.currentPlayerIndex}
+                avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]}
+                isBot={false}
+              />
+            )}
+            {opp2 && (
+              <OppZone
+                player={opp2}
+                isTurn={opp2Idx === state.currentPlayerIndex}
+                avatarColor={AVATAR_COLORS[opp2Idx % AVATAR_COLORS.length]}
+                isBot={false}
+              />
+            )}
+          </View>
+        )}
+
+        {opponents.length === 3 && opp1 && (
+          <View style={styles.oppNorthSingle}>
+            <OppZone
+              player={opp1}
+              isTurn={opp1Idx === state.currentPlayerIndex}
+              avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]}
+              isBot={false}
+            />
+          </View>
+        )}
+
+        <View style={styles.centerRow}>
+          {opponents.length === 3 && opp2 && (
+            <View style={styles.sideOpp}>
+              <OppZone
+                player={opp2}
+                isTurn={opp2Idx === state.currentPlayerIndex}
+                avatarColor={AVATAR_COLORS[opp2Idx % AVATAR_COLORS.length]}
+                compact
+                isBot={false}
+              />
+            </View>
+          )}
+
+          <CenterPiles />
+
+          {opponents.length === 3 && opp3 && (
+            <View style={styles.sideOpp}>
+              <OppZone
+                player={opp3}
+                isTurn={opp3Idx === state.currentPlayerIndex}
+                avatarColor={AVATAR_COLORS[opp3Idx % AVATAR_COLORS.length]}
+                compact
+                isBot={false}
+              />
+            </View>
+          )}
         </View>
 
-        {renderOpponents()}
-
         <View style={styles.handArea}>
-          {(throwError || contextError) ? (
-            <Animated.View entering={FadeIn} exiting={FadeOut} style={[styles.errorPill, { marginBottom: 4 }]}>
-              <Ionicons name="alert-circle" size={13} color="#fff" />
-              <Text style={styles.errorText}>{contextError || throwError}</Text>
-              {contextError ? (
-                <Pressable onPress={clearError} hitSlop={8} style={{ padding: 4 }}>
-                  <Ionicons name="close-circle" size={16} color="#fff" />
-                </Pressable>
-              ) : null}
-            </Animated.View>
-          ) : null}
+          <View style={styles.handTopRow}>
+            <View style={styles.handTopCenterWrap}>
+              <View style={styles.handTopCenteredRow}>
+                {isHumanTurn && state.turnPhase === "pick" && (
+                  <Animated.View entering={ZoomIn} style={[styles.phaseBadge, styles.phasePick]}>
+                    <Text style={styles.phaseText}>↑ PICK</Text>
+                  </Animated.View>
+                )}
+              </View>
+            </View>
+
+            {(throwError || contextError) ? (
+              <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.errorPill}>
+                <Ionicons name="alert-circle" size={12} color="#fff" />
+                <Text style={styles.errorText}>{contextError || throwError}</Text>
+                {contextError ? (
+                  <Pressable onPress={clearError} hitSlop={8} style={{ padding: 4 }}>
+                    <Ionicons name="close-circle" size={16} color="#fff" />
+                  </Pressable>
+                ) : null}
+              </Animated.View>
+            ) : null}
+          </View>
 
           <View style={styles.handRow}>
-            <View style={styles.handCardsWrapper}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.handScroll}>
-                {humanHand.map((card, idx) => {
-                  const isSelected = selectedCards.includes(card.id);
-                  return (
-                    <Animated.View
-                      key={card.id}
-                      entering={FadeIn.delay(idx * 30)}
-                      style={{ marginLeft: idx > 0 ? -12 : 0, marginTop: isSelected ? -14 : 0 }}
-                    >
-                      <Card
-                        card={card}
-                        selected={isSelected}
-                        onPress={() => handleCardPress(card)}
-                        size="medium"
-                        disabled={!isHumanTurn || state.turnPhase !== "throw"}
-                      />
-                    </Animated.View>
-                  );
-                })}
-              </ScrollView>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.handScrollView}
+              contentContainerStyle={[styles.handScroll, { paddingRight: 206 }]}
+            >
+              {humanHand.map((card, idx) => {
+                const isSelected = selectedCards.includes(card.id);
+                return (
+                  <Animated.View
+                    key={card.id}
+                    entering={FadeIn.delay(idx * 25)}
+                    style={{
+                      marginLeft: idx > 0 ? -14 : 0,
+                      marginTop: isSelected ? -16 : 0,
+                      zIndex: isSelected ? 10 : idx,
+                    }}
+                  >
+                    <Card
+                      card={card}
+                      selected={isSelected}
+                      onPress={() => handleCardPress(card)}
+                      size="medium"
+                      disabled={!isHumanTurn || state.turnPhase !== "throw"}
+                    />
+                  </Animated.View>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.meAside} pointerEvents="box-none">
+              <View style={styles.meAsideInner}>
+                <View style={styles.meAvatar}>
+                  <PlayerAvatarImage
+                    avatarIndex={avatarIndex}
+                    size={54}
+                    borderColor={COLORS.border}
+                    backgroundColor="rgba(0,0,0,0.35)"
+                  />
+                </View>
+                <View style={styles.meAsideTextCol}>
+                  <Text style={styles.meName} numberOfLines={1}>{youRowName}</Text>
+                  <Text style={styles.meScore}>{humanPlayer?.totalScore ?? 0} pts</Text>
+                </View>
+              </View>
             </View>
-            <View style={styles.handActionBtns}>
-            {(state.canCallShow ?? false) && isHumanTurn && state.turnPhase === "throw" && (
-              <Animated.View entering={ZoomIn}>
-                <Pressable style={styles.showBtn} onPress={handleShow}>
-                  <Text style={styles.showBtnText}>SHOW</Text>
+
+            <View style={styles.actionCol}>
+              {(state.canCallShow ?? false) && isHumanTurn && state.turnPhase === "throw" && (
+                <Animated.View entering={ZoomIn}>
+                  <Pressable style={styles.showBtn} onPress={handleShow}>
+                    <LinearGradient
+                      colors={[COLORS.accent, "#C0392B"]}
+                      style={StyleSheet.absoluteFill}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    />
+                    <Text style={styles.showBtnText}>SHOW</Text>
+                  </Pressable>
+                </Animated.View>
+              )}
+
+              {isHumanTurn && state.turnPhase === "throw" && (
+                <Pressable
+                  style={[styles.throwBtn, selectedCards.length === 0 && styles.throwBtnOff]}
+                  onPress={handleThrow}
+                  disabled={selectedCards.length === 0}
+                >
+                  <Ionicons name="send" size={13} color="#000" />
+                  <Text style={styles.throwBtnText}>
+                    {selectedCards.length > 0 ? `THROW (${selectedCards.length})` : "THROW"}
+                  </Text>
                 </Pressable>
-              </Animated.View>
-            )}
-            {isHumanTurn && state.turnPhase === "throw" && (
-              <Pressable
-                style={[styles.throwBtn, selectedCards.length === 0 && styles.throwBtnOff]}
-                onPress={handleThrow}
-                disabled={selectedCards.length === 0}
-              >
-                <Ionicons name="send" size={14} color="#000" />
-                <Text style={styles.throwBtnText}>
-                  THROW{selectedCards.length > 0 ? ` (${selectedCards.length})` : ""}
-                </Text>
-              </Pressable>
-            )}
+              )}
             </View>
           </View>
         </View>
       </View>
 
-      <View style={[styles.topBarOverlay, { top: topInset, left: leftInset, right: rightInset }]}>
+      <View style={[styles.topBar, { top: topInset + 4, left: leftInset + 8, right: rightInset + 8 }]}>
         <Pressable style={styles.iconBtn} onPress={handleQuit}>
-          <Ionicons name="close" size={18} color={COLORS.textMuted} />
+          <Ionicons name="close" size={16} color={COLORS.textMuted} />
         </Pressable>
         <View style={styles.topCenter} />
         <View style={styles.topBarRight}>
@@ -515,7 +567,7 @@ export default function GameMultiplayerScreen() {
             <Text style={styles.roundBadgeText}>{state.round}</Text>
           </View>
           <Pressable style={styles.iconBtn} onPress={() => setShowScoreModal(true)}>
-            <Ionicons name="stats-chart" size={18} color={COLORS.gold} />
+            <Ionicons name="stats-chart" size={16} color={COLORS.gold} />
           </Pressable>
         </View>
       </View>
@@ -529,8 +581,22 @@ export default function GameMultiplayerScreen() {
             {state.players.map((p, idx) => (
               <View key={p.id} style={[styles.scoreRow, p.id === playerId && styles.scoreRowMe]}>
                 <View style={styles.scoreLeft}>
-                  <View style={[styles.scoreAvatar, { backgroundColor: AVATAR_COLORS[idx % AVATAR_COLORS.length] }]}>
-                    <Text style={styles.scoreAvatarTxt}>{p.name?.[0] ?? "?"}</Text>
+                  <View
+                    style={[
+                      styles.scoreAvatar,
+                      p.id !== playerId && { backgroundColor: AVATAR_COLORS[idx % AVATAR_COLORS.length] },
+                    ]}
+                  >
+                    {p.id === playerId ? (
+                      <PlayerAvatarImage
+                        avatarIndex={avatarIndex}
+                        size={26}
+                        borderColor="rgba(0,0,0,0.35)"
+                        backgroundColor="rgba(0,0,0,0.3)"
+                      />
+                    ) : (
+                      <Text style={styles.scoreAvatarTxt}>{p.name?.[0] ?? "?"}</Text>
+                    )}
                   </View>
                   <Text style={styles.scoreNameTxt}>{p.name}</Text>
                   {p.id === playerId && (
@@ -669,173 +735,324 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   dealingText: { color: COLORS.gold, fontSize: 22, fontWeight: "700", letterSpacing: 2 },
-  tableArea: { ...StyleSheet.absoluteFillObject, justifyContent: "space-between", overflow: "hidden" },
-  feltOval: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 999,
-    backgroundColor: COLORS.felt,
-    borderWidth: 6,
-    borderColor: "rgba(255,215,0,0.35)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
-    elevation: 20,
+  tableBackground: {
+    ...StyleSheet.absoluteFillObject,
     overflow: "hidden",
   },
-  oppNorthRow: { alignItems: "center", paddingTop: 12, flexShrink: 0, zIndex: 2 },
-  oppWest: { justifyContent: "center", alignItems: "flex-end", paddingRight: 8, minWidth: 100, zIndex: 2 },
-  oppEast: { justifyContent: "center", alignItems: "flex-start", paddingLeft: 8, minWidth: 100, zIndex: 2 },
-  oppZoneSide: { alignItems: "center", gap: 4, maxWidth: 130 },
-  centerContent: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 16, flex: 1, zIndex: 2 },
-  pickAreaRow: { flexDirection: "row", alignItems: "center", gap: 16 },
-  opponentsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    paddingHorizontal: 36,
-    paddingTop: 12,
-    flexShrink: 0,
-    zIndex: 2,
+  tableBgDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.14)",
   },
-  oppZone: { alignItems: "center", gap: 4, maxWidth: 130 },
+  gameContent: {
+    flex: 1,
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  oppNorthSingle: {
+    alignItems: "center",
+    paddingTop: 2,
+  },
+  oppNorthRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingHorizontal: 20,
+  },
+  oppZone: {
+    alignItems: "center",
+    gap: 3,
+    minWidth: 80,
+  },
+  oppZoneCompact: {
+    alignItems: "center",
+    gap: 2,
+    minWidth: 70,
+  },
   oppAvatarRing: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
     borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.2)",
+    borderColor: "rgba(255,255,255,0.15)",
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
+    shadowColor: COLORS.gold,
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 10,
     elevation: 8,
   },
-  oppAvatarRingActive: { borderColor: COLORS.gold, borderWidth: 2.5 },
-  oppAvatar: { width: 40, height: 40, borderRadius: 20, justifyContent: "center", alignItems: "center" },
-  oppInitial: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  oppAvatarRingCompact: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+  },
+  oppAvatar: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  oppAvatarCompact: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  oppInitial: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "700",
+  },
   turnDot: {
     position: "absolute",
     top: -2,
     right: -2,
-    width: 9,
-    height: 9,
+    width: 10,
+    height: 10,
     borderRadius: 5,
     backgroundColor: COLORS.gold,
-    borderWidth: 1.5,
-    borderColor: "#000",
-  },
-  oppName: { color: COLORS.text, fontSize: 12, fontWeight: "600", textAlign: "center" },
-  oppCardsRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
-  oppCard: { borderRadius: 3 },
-  oppMeta: { color: COLORS.textDim, fontSize: 10, fontWeight: "500", textAlign: "center", marginTop: 2 },
-  centerRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 16, flex: 1, zIndex: 2 },
-  pileWrap: { alignItems: "center", gap: 4, position: "relative" },
-  pileGlow: { shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 14, elevation: 10 },
-  countBadge: {
-    position: "absolute",
-    top: -8,
-    right: -8,
-    backgroundColor: COLORS.gold,
-    borderRadius: 10,
-    minWidth: 22,
-    height: 22,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 4,
     borderWidth: 2,
     borderColor: "#000",
   },
-  countBadgeText: { color: "#000", fontSize: 10, fontWeight: "800" },
-  pileLabel: { color: COLORS.textDim, fontSize: 8, fontWeight: "700", letterSpacing: 1.5, marginTop: 2, textAlign: "center", alignSelf: "center" },
-  pickCardHint: {
+  oppName: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  oppCardsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  oppMeta: {
+    color: COLORS.textDim,
+    fontSize: 9,
+    fontWeight: "500",
+  },
+  centerRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  sideOpp: {
+    justifyContent: "center",
+    alignItems: "center",
+    width: 90,
+  },
+  centerPiles: {
+    flex: 1,
+    alignItems: "center",
+    gap: 8,
+    justifyContent: "center",
+  },
+  pilesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  pileWrap: {
+    alignItems: "center",
+    gap: 4,
+  },
+  pickHintBadge: {
     backgroundColor: COLORS.gold,
     borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    marginBottom: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 4,
-    elevation: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 2,
   },
-  pickCardHintText: { color: "#000", fontSize: 10, fontWeight: "700" },
-  tapHint: {
-    position: "absolute",
-    top: -22,
-    backgroundColor: COLORS.gold,
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35,
-    shadowRadius: 4,
-    elevation: 6,
+  pickHintText: {
+    color: "#000",
+    fontSize: 9,
+    fontWeight: "800",
   },
-  tapHintText: { color: "#000", fontSize: 8, fontWeight: "700" },
-  centerDivider: { alignItems: "center" },
-  arrowText: { color: COLORS.textDim, fontSize: 20 },
-  thrownRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "center" },
-  thrownBox: { minWidth: 52, height: 76, justifyContent: "center", alignItems: "center" },
-  selectedPreviewRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  emptyBox: {
+  pileLabel: {
+    color: COLORS.textDim,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 1.5,
+  },
+  pileArrow: {
+    alignItems: "center",
+  },
+  pileArrowText: {
+    color: COLORS.textDim,
+    fontSize: 18,
+  },
+  thrownBox: {
+    minWidth: 52,
+    height: 76,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyPile: {
     width: 52,
     height: 76,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.2)",
+    borderColor: "rgba(255,255,255,0.15)",
     borderStyle: "dashed",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.08)",
   },
-  emptyBoxText: { color: COLORS.textDim, fontSize: 20 },
-  thrownScroll: { alignItems: "center", paddingHorizontal: 4 },
-  handArea: {
-    width: "100%",
-    paddingTop: 6,
+  emptyPileText: {
+    color: COLORS.textDim,
+    fontSize: 9,
+    fontWeight: "600",
+  },
+  thrownScroll: {
+    alignItems: "center",
+    paddingHorizontal: 2,
+  },
+  botThinkingBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderRadius: 10,
     paddingHorizontal: 12,
-    paddingBottom: 6,
-    flexShrink: 0,
-    zIndex: 5,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  botThinkingText: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  handArea: {
+    paddingHorizontal: 4,
+    gap: 4,
+    paddingBottom: 2,
+  },
+  handTopRow: {
+    width: "100%",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 4,
+  },
+  handTopCenterWrap: {
+    width: "100%",
     alignItems: "center",
   },
-  handRow: { flexDirection: "row", alignItems: "center", width: "100%", gap: 12 },
-  handCardsWrapper: { flex: 1, justifyContent: "center", alignItems: "center", minWidth: 0 },
-  handScroll: { paddingVertical: 6, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },
-  handActionBtns: { flexDirection: "column", alignItems: "center", gap: 8, flexShrink: 0 },
+  handTopCenteredRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 8,
+  },
+  meAside: {
+    position: "absolute",
+    right: 88,
+    top: 0,
+    bottom: 0,
+    width: 118,
+    justifyContent: "center",
+    paddingLeft: 0,
+  },
+  meAsideInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: 6,
+  },
+  meAsideTextCol: {
+    flexShrink: 1,
+    alignItems: "flex-start",
+  },
+  meAvatar: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    overflow: "hidden",
+  },
+  meName: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "left",
+    maxWidth: 72,
+  },
+  meScore: {
+    color: COLORS.textDim,
+    fontSize: 9,
+    fontWeight: "500",
+    textAlign: "left",
+  },
+  phaseBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+  },
+  phasePick: {
+    backgroundColor: "rgba(52,152,219,0.15)",
+    borderColor: "rgba(52,152,219,0.4)",
+  },
+  phaseText: {
+    color: COLORS.text,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  handRow: {
+    position: "relative",
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 72,
+  },
+  handScrollView: {
+    flex: 1,
+    alignSelf: "stretch",
+  },
+  handScroll: {
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    paddingRight: 12,
+    alignItems: "center",
+    flexGrow: 1,
+    justifyContent: "center",
+  },
+  actionCol: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 7,
+    width: 88,
+  },
   showBtn: {
-    backgroundColor: COLORS.accent,
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 7,
+    borderRadius: 16,
+    overflow: "hidden",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     shadowColor: COLORS.accent,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.6,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 6,
   },
   showBtnText: { color: "#fff", fontSize: 12, fontWeight: "900", letterSpacing: 1.5 },
   throwBtn: {
     backgroundColor: COLORS.gold,
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 7,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
+    shadowColor: COLORS.gold,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.45,
     shadowRadius: 6,
     elevation: 6,
   },
@@ -849,30 +1066,26 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    flexShrink: 1,
+    maxWidth: "92%",
+    alignSelf: "center",
   },
   errorText: { color: "#fff", fontSize: 10, fontWeight: "600", flexShrink: 1 },
-  topBarOverlay: {
+  topBar: {
     position: "absolute",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    zIndex: 10,
+    zIndex: 20,
   },
   iconBtn: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.55)",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    elevation: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
   },
   topCenter: { flex: 1 },
   topBarRight: {
