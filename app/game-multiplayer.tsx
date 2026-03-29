@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -41,6 +41,9 @@ import {
   SUIT_SYMBOLS,
 } from "@/lib/gameEngine";
 import COLORS, { AVATAR_COLORS } from "@/constants/colors";
+import { FlightCard } from "@/components/FlightCard";
+import { useGameCardFlightAnimations } from "@/hooks/useGameCardFlightAnimations";
+import { getSeatScreenPosForLocalPlayer } from "@/lib/game-card-flight-positions";
 
 const GAME_TABLE_BACKGROUND = require("@/assets/images/game-table-background.png");
 
@@ -143,6 +146,24 @@ export default function GameMultiplayerScreen() {
   const pulseStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulse.value }],
   }));
+
+  const getPlayerScreenPos = useCallback(
+    (playerIdx: number, W: number, H: number) =>
+      getSeatScreenPosForLocalPlayer(playerIdx, state?.players ?? [], playerId ?? "", W, H),
+    [state?.players, playerId],
+  );
+
+  const flightAnimEnabled = Boolean(state && playerId && state.phase === "playing");
+
+  const { animations, removeAnim } = useGameCardFlightAnimations(
+    getPlayerScreenPos,
+    flightAnimEnabled,
+    state?.lastThrown ?? [],
+    state?.lastThrownByPlayerId,
+    state?.turnPhase ?? "",
+    state?.currentPlayerIndex ?? 0,
+    state?.players ?? [],
+  );
 
   useEffect(() => {
     if (state?.phase === "show") setShowReveal(true);
@@ -571,6 +592,10 @@ export default function GameMultiplayerScreen() {
           </Pressable>
         </View>
       </View>
+
+      {animations.map((anim) => (
+        <FlightCard key={anim.id} {...anim} onDone={removeAnim} />
+      ))}
 
       {/* Scoreboard overlay (avoids Modal+Reanimated crash) */}
       {showScoreModal && (

@@ -8,7 +8,6 @@ import {
   Platform,
   Alert,
   Dimensions,
-  useWindowDimensions,
 } from "react-native";
 import Animated, {
   useSharedValue,
@@ -17,14 +16,11 @@ import Animated, {
   withTiming,
   withSequence,
   withRepeat,
-  withDelay,
   FadeIn,
   FadeOut,
   ZoomIn,
   SlideInDown,
   interpolate,
-  Easing,
-  runOnJS,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -52,124 +48,11 @@ import {
 } from "@/lib/gameEngine";
 import type { GameState } from "@/lib/gameEngine";
 import COLORS, { AVATAR_COLORS } from "@/constants/colors";
+import { FlightCard } from "@/components/FlightCard";
+import { useGameCardFlightAnimations } from "@/hooks/useGameCardFlightAnimations";
+import { getSeatScreenPosForLocalPlayer } from "@/lib/game-card-flight-positions";
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
-
-// ─── Position helpers – take live W/H so landscape/portrait are both correct ──
-function getDeckPos(W: number, H: number)    { return { x: W * 0.40, y: H * 0.50 }; }
-function getDiscardPos(W: number, H: number) { return { x: W * 0.60, y: H * 0.50 }; }
-function getHumanPos(W: number, H: number)   { return { x: W * 0.50, y: H * 0.82 }; }
-
-function getBotPos(botIdx: number, botCount: number, W: number, H: number): { x: number; y: number } {
-  if (botCount === 1) return { x: W * 0.50, y: H * 0.16 };
-  if (botCount === 2) return botIdx === 0
-    ? { x: W * 0.30, y: H * 0.16 }
-    : { x: W * 0.70, y: H * 0.16 };
-  // 3 bots
-  if (botIdx === 0) return { x: W * 0.50, y: H * 0.16 };
-  if (botIdx === 1) return { x: W * 0.08, y: H * 0.50 };
-  return { x: W * 0.92, y: H * 0.50 };
-}
-
-/** Seat positions for online: local player at bottom, others use same layout as VS bots. */
-function getOnlinePlayerScreenPos(
-  playerIdx: number,
-  players: Array<{ id: string }>,
-  myPlayerId: string,
-  W: number,
-  H: number,
-): { x: number; y: number } {
-  const humanIdx = players.findIndex((p) => p.id === myPlayerId);
-  if (playerIdx === humanIdx) return getHumanPos(W, H);
-  const opponentIds = players.filter((p) => p.id !== myPlayerId).map((p) => p.id);
-  const pid = players[playerIdx]?.id;
-  const oppSlot = opponentIds.findIndex((id) => id === pid);
-  if (oppSlot < 0) return getHumanPos(W, H);
-  return getBotPos(oppSlot, opponentIds.length, W, H);
-}
-
-// ─── Anim item ────────────────────────────────────────────────────────────────
-const FLIGHT_W = 46;
-const FLIGHT_H = 66;
-
-interface AnimItem {
-  id: string;
-  card?: CardType;
-  faceDown?: boolean;
-  fromPos: { x: number; y: number };
-  toPos: { x: number; y: number };
-  delay: number;
-}
-
-// ─── FlightCard – absolute-positioned animated card ──────────────────────────
-interface FlightCardProps extends AnimItem {
-  onDone: (id: string) => void;
-}
-
-function FlightCard({ id, card, faceDown, fromPos, toPos, delay, onDone }: FlightCardProps) {
-  const progress = useSharedValue(0);
-  const isRed = card && (card.suit === "hearts" || card.suit === "diamonds");
-  const symbol = card ? (SUIT_SYMBOLS[card.suit] ?? "") : "";
-
-  useEffect(() => {
-    progress.value = withDelay(
-      delay,
-      withTiming(1, { duration: 1700, easing: Easing.out(Easing.cubic) }, (done) => {
-        if (done) runOnJS(onDone)(id);
-      })
-    );
-  }, []);
-
-  const animStyle = useAnimatedStyle(() => {
-    const t = progress.value;
-    const dx = toPos.x - fromPos.x;
-    const dy = toPos.y - fromPos.y;
-    const arcH = Math.min(Math.abs(dx), Math.abs(dy)) * 0.35 + 35;
-    return {
-      transform: [
-        { translateX: t * dx },
-        { translateY: t * dy - Math.sin(t * Math.PI) * arcH },
-        { scale: interpolate(t, [0, 0.4, 1], [0.9, 1.28, 0.92]) },
-      ],
-      opacity: interpolate(t, [0, 0.08, 0.78, 1], [0, 1, 1, 0]),
-    };
-  });
-
-  return (
-    <Animated.View
-      style={[
-        {
-          position: "absolute",
-          left: fromPos.x - FLIGHT_W / 2,
-          top: fromPos.y - FLIGHT_H / 2,
-          width: FLIGHT_W,
-          height: FLIGHT_H,
-          zIndex: 200,
-        },
-        animStyle,
-      ]}
-    >
-      {faceDown || !card ? (
-        <View style={styles.flightBack}>
-          <Text style={styles.flightBackSymbol}>♠</Text>
-        </View>
-      ) : (
-        <View style={[
-          styles.flightFace,
-          {
-            shadowColor: isRed ? COLORS.cardRed : "#1A1A1A",
-            borderColor: isRed ? COLORS.cardRed : "#1A1A1A",
-          },
-        ]}>
-          <Text style={styles.flightRank}>{card.rank}</Text>
-          <Text style={[styles.flightSuit, { color: isRed ? COLORS.cardRed : "#1A1A1A" }]}>
-            {symbol}
-          </Text>
-        </View>
-      )}
-    </Animated.View>
-  );
-}
+const { height: SCREEN_H } = Dimensions.get("window");
 
 // ─── Opponent Zone ────────────────────────────────────────────────────────────
 
@@ -282,35 +165,28 @@ function GameOnlineTable({
   const { avatarIndex, displayName: savedDisplayName } = useSettings();
 
   const insets = useSafeAreaInsets();
-  // Live screen dimensions — always correct in landscape/portrait
-  const { width: W, height: H } = useWindowDimensions();
-  const dimRef = useRef({ W, H });
-  useEffect(() => { dimRef.current = { W, H }; }, [W, H]);
 
   const [showScoreModal, setShowScoreModal] = useState(false);
   const [showReveal, setShowReveal] = useState(false);
   const [showConfirmShow, setShowConfirmShow] = useState(false);
   const [throwError, setThrowError] = useState("");
-  const [animations, setAnimations] = useState<AnimItem[]>([]);
   const notifRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Snapshot of previous state for animation detection
-  const prevAnimStateRef = useRef<{
-    thrownKey: string;
-    thrownCards: CardType[];
-    phase: string;
-    playerIdx: number;
-    initialized: boolean;
-  }>({ thrownKey: "", thrownCards: [], phase: "", playerIdx: -1, initialized: false });
+  const getPlayerScreenPos = useCallback(
+    (playerIdx: number, W: number, H: number) =>
+      getSeatScreenPosForLocalPlayer(playerIdx, state.players, playerId, W, H),
+    [state.players, playerId],
+  );
 
-  const addAnim = useCallback((anim: Omit<AnimItem, "id">) => {
-    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    setAnimations((prev) => [...prev, { ...anim, id }]);
-  }, []);
-
-  const removeAnim = useCallback((id: string) => {
-    setAnimations((prev) => prev.filter((a) => a.id !== id));
-  }, []);
+  const { animations, removeAnim } = useGameCardFlightAnimations(
+    getPlayerScreenPos,
+    state.phase === "playing",
+    state.lastThrown,
+    state.lastThrownByPlayerId,
+    state.turnPhase,
+    state.currentPlayerIndex,
+    state.players,
+  );
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
@@ -329,73 +205,6 @@ function GameOnlineTable({
   const pulseStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulse.value }],
   }));
-
-  // ── Unified card animation detector ─────────────────────────────────────────
-  useEffect(() => {
-    const prev = prevAnimStateRef.current;
-    const newKey = state.lastThrown.map((c) => c.id).join(",");
-
-    if (!prev.initialized) {
-      // Seed refs on first render — no animation
-      prevAnimStateRef.current = {
-        thrownKey: newKey,
-        thrownCards: [...state.lastThrown],
-        phase: state.turnPhase,
-        playerIdx: state.currentPlayerIndex,
-        initialized: true,
-      };
-      return;
-    }
-
-    // Use live dimensions via ref so landscape/portrait positions are always correct
-    const { W: lW, H: lH } = dimRef.current;
-    const DECK    = getDeckPos(lW, lH);
-    const DISCARD = getDiscardPos(lW, lH);
-
-    // 1. THROW detected: discard pile changed to a new non-empty set
-    if (
-      state.lastThrown.length > 0 &&
-      newKey !== prev.thrownKey &&
-      newKey !== ""
-    ) {
-      const throwerId = state.lastThrownByPlayerId;
-      const throwerIdx = state.players.findIndex((p) => p.id === throwerId);
-      if (throwerIdx >= 0) {
-        const fromPos = getOnlinePlayerScreenPos(throwerIdx, state.players, playerId, lW, lH);
-        state.lastThrown.slice(0, 3).forEach((card, i) => {
-          addAnim({ card, fromPos, toPos: DISCARD, delay: i * 55 });
-        });
-      }
-    }
-
-    // 2. PICK detected: turnPhase just left "pick" phase
-    if (prev.phase === "pick" && state.turnPhase === "throw" && prev.playerIdx >= 0) {
-      const pickerPos = getOnlinePlayerScreenPos(prev.playerIdx, state.players, playerId, lW, lH);
-      const prevCount = prev.thrownCards.length;
-      const newCount = state.lastThrown.length;
-
-      if (prevCount > newCount) {
-        // PICK FROM DISCARD: a card was removed from the thrown pile → animate it face-up
-        const pickedCard = prev.thrownCards.find(
-          (c) => !state.lastThrown.some((nc) => nc.id === c.id)
-        );
-        if (pickedCard) {
-          addAnim({ card: pickedCard, fromPos: DISCARD, toPos: pickerPos, delay: 0 });
-        }
-      } else {
-        // PICK FROM DECK: thrown pile unchanged → animate face-down card from deck
-        addAnim({ faceDown: true, fromPos: DECK, toPos: pickerPos, delay: 0 });
-      }
-    }
-
-    prevAnimStateRef.current = {
-      thrownKey: newKey,
-      thrownCards: [...state.lastThrown],
-      phase: state.turnPhase,
-      playerIdx: state.currentPlayerIndex,
-      initialized: true,
-    };
-  }, [state, playerId, state.lastThrown, state.lastThrownByPlayerId, state.turnPhase, state.currentPlayerIndex]);
 
   useEffect(() => {
     if (state.phase === "show") setShowReveal(true);
@@ -1474,49 +1283,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     minWidth: 14,
     textAlign: "center",
-  },
-
-  // ── FLIGHT CARD (face-up) ──
-  flightFace: {
-    flex: 1,
-    borderRadius: 8,
-    backgroundColor: COLORS.cardWhite,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.75,
-    shadowRadius: 14,
-    elevation: 20,
-  },
-  flightRank: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#1A1A1A",
-  },
-  flightSuit: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-
-  // ── FLIGHT CARD (face-down) ──
-  flightBack: {
-    flex: 1,
-    borderRadius: 8,
-    backgroundColor: "#1B3A6B",
-    borderWidth: 2,
-    borderColor: "#2A5CA8",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.75,
-    shadowRadius: 14,
-    elevation: 20,
-  },
-  flightBackSymbol: {
-    fontSize: 22,
-    color: "rgba(255,255,255,0.18)",
   },
 
   // ── OVERLAYS ──
