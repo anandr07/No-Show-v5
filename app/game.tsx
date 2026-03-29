@@ -33,6 +33,12 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { useGame } from "@/context/GameContext";
+import { useAuth } from "@/context/AuthContext";
+import { useSettings } from "@/context/SettingsContext";
+import { PlayerAvatarImage } from "@/components/PlayerAvatarImage";
+import { BotAvatarImage } from "@/components/BotAvatarImage";
+import { botAvatarIndexFromPlayersList } from "@/constants/bot-avatar";
+import { resolvePlayerDisplayName } from "@/lib/player-display";
 import { Card, CardBack } from "@/components/Card";
 import { playCardFlip, playTap, playCardDeal, playShow } from "@/lib/sound";
 import {
@@ -164,9 +170,11 @@ interface OppZoneProps {
   avatarColor: string;
   compact?: boolean;
   isBot?: boolean;
+  /** When `isBot`, index 0..2 among bot opponents for portrait art. */
+  botAvatarIndex?: number;
 }
 
-function OppZone({ player, isTurn, avatarColor, compact, isBot }: OppZoneProps) {
+function OppZone({ player, isTurn, avatarColor, compact, isBot, botAvatarIndex = 0 }: OppZoneProps) {
   const glow = useSharedValue(0);
 
   useEffect(() => {
@@ -190,15 +198,23 @@ function OppZone({ player, isTurn, avatarColor, compact, isBot }: OppZoneProps) 
 
   const cardCount = Math.min(player.hand.length, 6);
 
+  const botImgSize = compact ? 50 : 58;
+
   return (
     <View style={compact ? styles.oppZoneCompact : styles.oppZone}>
-      <Animated.View style={[styles.oppAvatarRing, glowStyle]}>
-        <View style={[styles.oppAvatar, { backgroundColor: avatarColor }]}>
-          {isBot
-            ? <FontAwesome5 name="robot" size={14} color="#fff" />
-            : <Text style={styles.oppInitial}>{player.name[0]}</Text>
-          }
-        </View>
+      <Animated.View style={[styles.oppAvatarRing, compact && styles.oppAvatarRingCompact, glowStyle]}>
+        {isBot ? (
+          <BotAvatarImage
+            botAvatarIndex={botAvatarIndex}
+            size={botImgSize}
+            borderColor="rgba(0,0,0,0.35)"
+            backgroundColor="rgba(0,0,0,0.35)"
+          />
+        ) : (
+          <View style={[styles.oppAvatar, compact && styles.oppAvatarCompact, { backgroundColor: avatarColor }]}>
+            <Text style={styles.oppInitial}>{player.name[0]?.toUpperCase() ?? "?"}</Text>
+          </View>
+        )}
         {isTurn && <View style={styles.turnDot} />}
       </Animated.View>
       <Text style={styles.oppName} numberOfLines={1}>{player.name}</Text>
@@ -227,6 +243,8 @@ export default function GameScreen() {
     resetGame,
     isBotThinking,
   } = useGame();
+  const { user } = useAuth();
+  const { avatarIndex, displayName: savedDisplayName } = useSettings();
 
   const insets = useSafeAreaInsets();
   // Live screen dimensions — always correct in landscape/portrait
@@ -393,6 +411,12 @@ export default function GameScreen() {
   }
 
   const humanPlayer = state.players.find((p) => p.type === "human");
+  const youRowName = resolvePlayerDisplayName({
+    localName: savedDisplayName,
+    authDisplayName: user?.user_metadata?.display_name,
+    email: user?.email ?? null,
+    fallback: humanPlayer?.name ?? "You",
+  });
   const opponents = state.players.filter((p) => p.type === "bot");
   const currentPlayer = state.players[state.currentPlayerIndex];
   const isHumanTurn = currentPlayer?.type === "human" && currentPlayer.id === humanPlayer?.id;
@@ -583,7 +607,8 @@ export default function GameScreen() {
         {opponents.length === 1 && opp1 && (
           <View style={styles.oppNorthSingle}>
             <OppZone player={opp1} isTurn={opp1Idx === state.currentPlayerIndex}
-              avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]} isBot />
+              avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]} isBot
+              botAvatarIndex={opponents.findIndex((o) => o.id === opp1.id)} />
           </View>
         )}
 
@@ -591,9 +616,11 @@ export default function GameScreen() {
         {opponents.length === 2 && (
           <View style={styles.oppNorthRow}>
             {opp1 && <OppZone player={opp1} isTurn={opp1Idx === state.currentPlayerIndex}
-              avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]} isBot />}
+              avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]} isBot
+              botAvatarIndex={opponents.findIndex((o) => o.id === opp1.id)} />}
             {opp2 && <OppZone player={opp2} isTurn={opp2Idx === state.currentPlayerIndex}
-              avatarColor={AVATAR_COLORS[opp2Idx % AVATAR_COLORS.length]} isBot />}
+              avatarColor={AVATAR_COLORS[opp2Idx % AVATAR_COLORS.length]} isBot
+              botAvatarIndex={opponents.findIndex((o) => o.id === opp2.id)} />}
           </View>
         )}
 
@@ -601,7 +628,8 @@ export default function GameScreen() {
         {opponents.length === 3 && opp1 && (
           <View style={styles.oppNorthSingle}>
             <OppZone player={opp1} isTurn={opp1Idx === state.currentPlayerIndex}
-              avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]} isBot />
+              avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]} isBot
+              botAvatarIndex={opponents.findIndex((o) => o.id === opp1.id)} />
           </View>
         )}
 
@@ -610,7 +638,8 @@ export default function GameScreen() {
           {opponents.length === 3 && opp2 && (
             <View style={styles.sideOpp}>
               <OppZone player={opp2} isTurn={opp2Idx === state.currentPlayerIndex}
-                avatarColor={AVATAR_COLORS[opp2Idx % AVATAR_COLORS.length]} compact isBot />
+                avatarColor={AVATAR_COLORS[opp2Idx % AVATAR_COLORS.length]} compact isBot
+                botAvatarIndex={opponents.findIndex((o) => o.id === opp2.id)} />
             </View>
           )}
 
@@ -619,7 +648,8 @@ export default function GameScreen() {
           {opponents.length === 3 && opp3 && (
             <View style={styles.sideOpp}>
               <OppZone player={opp3} isTurn={opp3Idx === state.currentPlayerIndex}
-                avatarColor={AVATAR_COLORS[opp3Idx % AVATAR_COLORS.length]} compact isBot />
+                avatarColor={AVATAR_COLORS[opp3Idx % AVATAR_COLORS.length]} compact isBot
+                botAvatarIndex={opponents.findIndex((o) => o.id === opp3.id)} />
             </View>
           )}
         </View>
@@ -627,24 +657,8 @@ export default function GameScreen() {
         {/* ── PLAYER HAND ── */}
         <View style={styles.handArea}>
           <View style={styles.handTopRow}>
-            <View
-              style={[
-                styles.handTopCenterWrap,
-                isHumanTurn &&
-                  state.turnPhase === "throw" &&
-                  !isBotThinking && { paddingRight: 92 },
-              ]}
-            >
+            <View style={styles.handTopCenterWrap}>
               <View style={styles.handTopCenteredRow}>
-                <View style={styles.meInfo}>
-                  <View style={[styles.meAvatar, { backgroundColor: AVATAR_COLORS[humanIndex % AVATAR_COLORS.length] }]}>
-                    <Ionicons name="person" size={14} color="#fff" />
-                  </View>
-                  <View>
-                    <Text style={styles.meName}>{humanPlayer?.name ?? "You"}</Text>
-                    <Text style={styles.meScore}>{humanPlayer?.totalScore ?? 0} pts</Text>
-                  </View>
-                </View>
                 {isHumanTurn && state.turnPhase === "pick" && (
                   <Animated.View entering={ZoomIn} style={[styles.phaseBadge, styles.phasePick]}>
                     <Text style={styles.phaseText}>↑ PICK</Text>
@@ -666,12 +680,7 @@ export default function GameScreen() {
               horizontal
               showsHorizontalScrollIndicator={false}
               style={styles.handScrollView}
-              contentContainerStyle={[
-                styles.handScroll,
-                isHumanTurn &&
-                  state.turnPhase === "throw" &&
-                  !isBotThinking && { paddingRight: 92 },
-              ]}
+              contentContainerStyle={[styles.handScroll, { paddingRight: 206 }]}
             >
                 {humanHand.map((card, idx) => {
                   const isSelected = state.selectedCards.includes(card.id);
@@ -696,6 +705,23 @@ export default function GameScreen() {
                   );
                 })}
             </ScrollView>
+
+            <View style={styles.meAside} pointerEvents="box-none">
+              <View style={styles.meAsideInner}>
+                <View style={styles.meAvatar}>
+                  <PlayerAvatarImage
+                    avatarIndex={avatarIndex}
+                    size={54}
+                    borderColor={COLORS.border}
+                    backgroundColor="rgba(0,0,0,0.35)"
+                  />
+                </View>
+                <View style={styles.meAsideTextCol}>
+                  <Text style={styles.meName} numberOfLines={1}>{youRowName}</Text>
+                  <Text style={styles.meScore}>{humanPlayer?.totalScore ?? 0} pts</Text>
+                </View>
+              </View>
+            </View>
 
             {/* Action buttons — absolute right so hand can span full width and stay visually centered */}
             <View style={styles.actionCol}>
@@ -774,10 +800,32 @@ export default function GameScreen() {
               {state.players.map((p, idx) => {
                 const isMe = p.id === humanPlayer?.id;
                 const danger = p.totalScore >= 80;
+                const botIdx = botAvatarIndexFromPlayersList(state.players, p.id);
                 return (
                   <View key={p.id} style={[styles.scoreRow, isMe && styles.scoreRowMe]}>
-                    <View style={[styles.scoreAvatar, { backgroundColor: AVATAR_COLORS[idx % AVATAR_COLORS.length] }]}>
-                      <Text style={styles.scoreAvatarTxt}>{p.name?.[0] ?? "?"}</Text>
+                    <View
+                      style={[
+                        styles.scoreAvatar,
+                        botIdx == null && { backgroundColor: AVATAR_COLORS[idx % AVATAR_COLORS.length] },
+                      ]}
+                    >
+                      {botIdx != null ? (
+                        <BotAvatarImage
+                          botAvatarIndex={botIdx}
+                          size={26}
+                          borderColor="rgba(0,0,0,0.35)"
+                          backgroundColor="rgba(0,0,0,0.3)"
+                        />
+                      ) : p.type === "human" ? (
+                        <PlayerAvatarImage
+                          avatarIndex={avatarIndex}
+                          size={26}
+                          borderColor="rgba(0,0,0,0.35)"
+                          backgroundColor="rgba(0,0,0,0.3)"
+                        />
+                      ) : (
+                        <Text style={styles.scoreAvatarTxt}>{p.name?.[0] ?? "?"}</Text>
+                      )}
                     </View>
                     <Text style={styles.scoreNameTxt} numberOfLines={1}>{p.name}</Text>
                     {isMe && <View style={styles.youTag}><Text style={styles.youTagTxt}>YOU</Text></View>}
@@ -874,6 +922,7 @@ export default function GameScreen() {
                 const isMe = p?.id === humanPlayer?.id;
                 const pIdx = state.players.findIndex((pl) => pl.id === score.playerId);
                 const avatarColor = AVATAR_COLORS[pIdx % AVATAR_COLORS.length];
+                const botIdx = p ? botAvatarIndexFromPlayersList(state.players, p.id) : null;
                 return (
                   <Animated.View
                     key={score.playerId}
@@ -887,8 +936,29 @@ export default function GameScreen() {
                       end={{ x: 1, y: 1 }}
                     />
 
-                    <View style={[styles.showRowAvatar, { backgroundColor: avatarColor }]}>
-                      <Text style={styles.showRowAvatarTxt}>{p?.name?.[0] ?? "?"}</Text>
+                    <View
+                      style={[
+                        styles.showRowAvatar,
+                        botIdx == null && { backgroundColor: avatarColor },
+                      ]}
+                    >
+                      {botIdx != null ? (
+                        <BotAvatarImage
+                          botAvatarIndex={botIdx}
+                          size={34}
+                          borderColor="rgba(255,255,255,0.2)"
+                          backgroundColor="rgba(0,0,0,0.35)"
+                        />
+                      ) : p?.type === "human" ? (
+                        <PlayerAvatarImage
+                          avatarIndex={avatarIndex}
+                          size={34}
+                          borderColor="rgba(255,255,255,0.2)"
+                          backgroundColor="rgba(0,0,0,0.35)"
+                        />
+                      ) : (
+                        <Text style={styles.showRowAvatarTxt}>{p?.name?.[0] ?? "?"}</Text>
+                      )}
                     </View>
 
                     <View style={styles.showRowLeft}>
@@ -1047,9 +1117,9 @@ const styles = StyleSheet.create({
     minWidth: 70,
   },
   oppAvatarRing: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
     borderWidth: 2,
     borderColor: "rgba(255,255,255,0.15)",
     justifyContent: "center",
@@ -1060,16 +1130,26 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 8,
   },
+  oppAvatarRingCompact: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+  },
   oppAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     justifyContent: "center",
     alignItems: "center",
   },
+  oppAvatarCompact: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
   oppInitial: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: "700",
   },
   turnDot: {
@@ -1229,30 +1309,45 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    minHeight: 8,
   },
-  meInfo: {
+  meAside: {
+    position: "absolute",
+    right: 88,
+    top: 0,
+    bottom: 0,
+    width: 118,
+    justifyContent: "center",
+    paddingLeft: 0,
+  },
+  meAsideInner: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "flex-start",
+    gap: 6,
+  },
+  meAsideTextCol: {
+    flexShrink: 1,
+    alignItems: "flex-start",
   },
   meAvatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    overflow: "hidden",
   },
   meName: {
     color: COLORS.text,
     fontSize: 12,
     fontWeight: "700",
+    textAlign: "left",
+    maxWidth: 72,
   },
   meScore: {
     color: COLORS.textDim,
     fontSize: 9,
     fontWeight: "500",
+    textAlign: "left",
   },
   errorPill: {
     flexDirection: "row",
@@ -1512,8 +1607,12 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,215,0,0.25)",
   },
   scoreAvatar: {
-    width: 26, height: 26, borderRadius: 13,
-    justifyContent: "center", alignItems: "center",
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
   },
   scoreAvatarTxt: { color: "#fff", fontSize: 11, fontWeight: "700" },
   scoreNameTxt: {
@@ -1644,9 +1743,14 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,215,0,0.3)",
   },
   showRowAvatar: {
-    width: 34, height: 34, borderRadius: 17,
-    justifyContent: "center", alignItems: "center",
-    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.2)",
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.2)",
+    overflow: "hidden",
   },
   showRowAvatarTxt: { color: "#fff", fontSize: 13, fontWeight: "700" },
   showRowLeft: { flex: 1, gap: 4 },

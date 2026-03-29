@@ -26,12 +26,20 @@ import { useGame } from "@/context/GameContext";
 import { useMultiplayerGame } from "@/context/MultiplayerGameContext";
 import { useOnlineGame } from "@/context/OnlineGameContext";
 import COLORS, { AVATAR_COLORS } from "@/constants/colors";
+import {
+  botAvatarIndexFromPlayersList,
+  botAvatarIndexForPlayer,
+} from "@/constants/bot-avatar";
+import { useSettings } from "@/context/SettingsContext";
+import { BotAvatarImage } from "@/components/BotAvatarImage";
+import { PlayerAvatarImage } from "@/components/PlayerAvatarImage";
 import { playSuccess } from "@/lib/sound";
 
 export default function ResultsScreen() {
   const vsGame = useGame();
   const multiplayer = useMultiplayerGame();
   const online = useOnlineGame();
+  const { avatarIndex } = useSettings();
 
   const isOnlineResults =
     online.state?.phase === "gameOver" && online.matchId != null;
@@ -42,6 +50,15 @@ export default function ResultsScreen() {
     : isMultiplayer
       ? multiplayer.gameState!
       : vsGame.state;
+  const rosterIsBot = (playerId: string) =>
+    online.players.find((op) => op.id === playerId)?.isBot ?? false;
+  const resolveResultsBotAvatarIndex = (playerId: string): number | null => {
+    if (isOnlineResults) {
+      if (!rosterIsBot(playerId)) return null;
+      return botAvatarIndexForPlayer(state.players, playerId, rosterIsBot);
+    }
+    return botAvatarIndexFromPlayersList(state.players, playerId);
+  };
   const resetGame = isOnlineResults
     ? online.resetOnline
     : isMultiplayer
@@ -129,8 +146,34 @@ export default function ResultsScreen() {
           />
           <MaterialCommunityIcons name="trophy" size={48} color={COLORS.gold} />
           <Text style={styles.winnerLabel}>WINNER</Text>
-          <View style={[styles.winnerAvatar, { backgroundColor: AVATAR_COLORS[state.players.findIndex((p) => p.id === winner?.id) % AVATAR_COLORS.length] }]}>
-            <Text style={styles.winnerInitial}>{winner?.name[0]}</Text>
+          <View
+            style={[
+              styles.winnerAvatar,
+              winner &&
+                resolveResultsBotAvatarIndex(winner.id) == null && {
+                  backgroundColor:
+                    AVATAR_COLORS[state.players.findIndex((pl) => pl.id === winner.id) % AVATAR_COLORS.length],
+                },
+            ]}
+          >
+            {winner &&
+              (resolveResultsBotAvatarIndex(winner.id) != null ? (
+                <BotAvatarImage
+                  botAvatarIndex={resolveResultsBotAvatarIndex(winner.id)!}
+                  size={56}
+                  borderColor="rgba(255,255,255,0.25)"
+                  backgroundColor="rgba(0,0,0,0.35)"
+                />
+              ) : winner.type === "human" ? (
+                <PlayerAvatarImage
+                  avatarIndex={avatarIndex}
+                  size={56}
+                  borderColor="rgba(255,255,255,0.25)"
+                  backgroundColor="rgba(0,0,0,0.35)"
+                />
+              ) : (
+                <Text style={styles.winnerInitial}>{winner.name[0]}</Text>
+              ))}
           </View>
           <Text style={styles.winnerName}>{winner?.name}</Text>
           <Text style={styles.winnerScore}>{winner?.totalScore ?? 0} pts</Text>
@@ -141,6 +184,7 @@ export default function ResultsScreen() {
           <Text style={styles.rankingsTitle}>FINAL RANKINGS</Text>
           {sortedPlayers.map((p, rank) => {
             const medal = rankMedal(rank);
+            const wBot = resolveResultsBotAvatarIndex(p.id);
             return (
               <Animated.View
                 key={p.id}
@@ -149,8 +193,32 @@ export default function ResultsScreen() {
               >
                 <View style={styles.rankLeft}>
                   <Text style={[styles.rankNum, { color: medal.color }]}>#{rank + 1}</Text>
-                  <View style={[styles.rankAvatar, { backgroundColor: AVATAR_COLORS[state.players.findIndex((sp) => sp.id === p.id) % AVATAR_COLORS.length] }]}>
-                    <Text style={styles.rankAvatarText}>{p.name[0]}</Text>
+                  <View
+                    style={[
+                      styles.rankAvatar,
+                      wBot == null && {
+                        backgroundColor:
+                          AVATAR_COLORS[state.players.findIndex((sp) => sp.id === p.id) % AVATAR_COLORS.length],
+                      },
+                    ]}
+                  >
+                    {wBot != null ? (
+                      <BotAvatarImage
+                        botAvatarIndex={wBot}
+                        size={36}
+                        borderColor="rgba(0,0,0,0.35)"
+                        backgroundColor="rgba(0,0,0,0.3)"
+                      />
+                    ) : p.type === "human" ? (
+                      <PlayerAvatarImage
+                        avatarIndex={avatarIndex}
+                        size={36}
+                        borderColor="rgba(0,0,0,0.35)"
+                        backgroundColor="rgba(0,0,0,0.3)"
+                      />
+                    ) : (
+                      <Text style={styles.rankAvatarText}>{p.name[0]}</Text>
+                    )}
                   </View>
                   <Text style={styles.rankName}>{p.name}</Text>
                   {p.status === "eliminated" && (
@@ -247,6 +315,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 3,
     borderColor: COLORS.gold,
+    overflow: "hidden",
   },
   winnerInitial: {
     color: "#fff",
@@ -306,6 +375,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
   },
   rankAvatarText: {
     color: "#fff",

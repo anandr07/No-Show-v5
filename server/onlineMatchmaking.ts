@@ -41,6 +41,13 @@ interface MatchMeta {
 const BOT_FILL_TIMEOUT_MS = 180_000;
 const BOT_REDUCTION_FALLBACK = 0.5;
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuidParam(s: string): boolean {
+  return UUID_RE.test(s);
+}
+
 function send(ws: WebSocket, payload: object) {
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(payload));
@@ -84,29 +91,93 @@ export class OnlineMatchmakingService {
 
     app.get("/api/online/profile/:userId", async (req, res) => {
       try {
+        const userId = req.params.userId?.trim() ?? "";
+        if (!isUuidParam(userId)) {
+          return res.status(400).json({ error: "invalid_user_id", stats: null, recentLedger: [] });
+        }
         const db = getDb();
-        const userId = req.params.userId;
         const [stats] = await db
           .select()
           .from(playerRankStats)
           .where(eq(playerRankStats.userId, userId))
           .limit(1);
 
-        const [lastEntries] = await Promise.all([
-          db
-            .select()
-            .from(onlinePointsLedger)
-            .where(eq(onlinePointsLedger.userId, userId))
-            .orderBy(desc(onlinePointsLedger.createdAt))
-            .limit(20),
-        ]);
+        const lastEntries = await db
+          .select()
+          .from(onlinePointsLedger)
+          .where(eq(onlinePointsLedger.userId, userId))
+          .orderBy(desc(onlinePointsLedger.createdAt))
+          .limit(20);
+
+        const statsOut = stats
+          ? {
+              display_name: stats.displayName,
+              online_points_total: stats.onlinePointsTotal,
+              online_wins: stats.onlineWins,
+              online_losses: stats.onlineLosses,
+              online_games_played: stats.onlineGamesPlayed,
+              current_level: stats.currentLevel,
+            }
+          : null;
 
         return res.json({
-          stats: stats ?? null,
+          stats: statsOut,
           recentLedger: lastEntries,
         });
       } catch {
         return res.status(500).json({ error: "Failed to load profile" });
+      }
+    });
+
+    app.get("/api/online/history/:userId", async (req, res) => {
+      try {
+        const userId = req.params.userId?.trim() ?? "";
+        if (!isUuidParam(userId)) {
+          return res.status(400).json({ error: "invalid_user_id", games: [] });
+        }
+        const limitRaw = parseInt(String(req.query.limit ?? "40"), 10);
+        const limit = Math.min(100, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 40));
+
+        const db = getDb();
+        const userUuid = sql.raw(`'${userId}'::uuid`);
+        const result = await db.execute(sql`
+          SELECT
+            m.id AS match_id,
+            m.mode::text AS mode,
+            m.ended_at AS ended_at,
+            m.is_bot_filled AS is_bot_filled,
+            m.winner_user_id AS winner_user_id,
+            COALESCE(SUM(l.points_delta), 0)::int AS points_delta
+          FROM online_match_players omp
+          INNER JOIN online_matches m ON m.id = omp.match_id
+          LEFT JOIN online_points_ledger l
+            ON l.match_id = m.id AND l.user_id = ${userUuid}
+          WHERE omp.user_id = ${userUuid}
+            AND omp.is_bot = false
+            AND m.status = 'completed'
+          GROUP BY m.id, m.mode, m.ended_at, m.is_bot_filled, m.winner_user_id, m.created_at
+          ORDER BY m.ended_at DESC NULLS LAST, m.created_at DESC
+          LIMIT ${sql.raw(String(limit))}
+        `);
+
+        const rawRows = (result.rows ?? []) as Record<string, unknown>[];
+        const games = rawRows.map((r) => {
+          const wid = r.winner_user_id;
+          const won =
+            wid != null && String(wid).toLowerCase() === userId.toLowerCase();
+          return {
+            match_id: String(r.match_id),
+            mode: String(r.mode),
+            ended_at: r.ended_at ? new Date(String(r.ended_at)).toISOString() : null,
+            is_bot_filled: Boolean(r.is_bot_filled),
+            won,
+            points_delta: Number(r.points_delta ?? 0),
+          };
+        });
+
+        return res.json({ games });
+      } catch {
+        return res.status(500).json({ error: "Failed to load history", games: [] });
       }
     });
   }

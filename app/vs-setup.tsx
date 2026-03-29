@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -22,11 +22,16 @@ import Animated, {
   interpolate,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useGame } from "@/context/GameContext";
+import { useAuth } from "@/context/AuthContext";
+import { useSettings } from "@/context/SettingsContext";
+import { PlayerAvatarImage } from "@/components/PlayerAvatarImage";
+import { BotAvatarImage } from "@/components/BotAvatarImage";
+import { resolvePlayerDisplayName } from "@/lib/player-display";
 import COLORS, { AVATAR_COLORS } from "@/constants/colors";
 import { playSuccess } from "@/lib/sound";
 
@@ -34,7 +39,20 @@ const { width: SCREEN_W } = Dimensions.get("window");
 
 const BOT_NAMES = ["Alex", "Sam", "Jordan", "Taylor", "Morgan"];
 
-function PlayerCard({ name, index, isHuman }: { name: string; index: number; isHuman: boolean }) {
+function PlayerCard({
+  name,
+  index,
+  isHuman,
+  avatarIndex = 0,
+  botAvatarIndex = 0,
+}: {
+  name: string;
+  index: number;
+  isHuman: boolean;
+  avatarIndex?: number;
+  /** 0..2 for bot preview portraits */
+  botAvatarIndex?: number;
+}) {
   const avatarColor = AVATAR_COLORS[index % AVATAR_COLORS.length];
   return (
     <Animated.View entering={FadeIn.delay(index * 60)} style={styles.playerCard}>
@@ -44,11 +62,22 @@ function PlayerCard({ name, index, isHuman }: { name: string; index: number; isH
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
-      <View style={[styles.playerAvatar, { backgroundColor: avatarColor }]}>
-        {isHuman
-          ? <Ionicons name="person" size={18} color="#fff" />
-          : <FontAwesome5 name="robot" size={14} color="#fff" />
-        }
+      <View style={[styles.playerAvatar, !isHuman && { backgroundColor: avatarColor }]}>
+        {isHuman ? (
+          <PlayerAvatarImage
+            avatarIndex={avatarIndex}
+            size={38}
+            borderColor={COLORS.border}
+            backgroundColor="rgba(0,0,0,0.35)"
+          />
+        ) : (
+          <BotAvatarImage
+            botAvatarIndex={botAvatarIndex}
+            size={42}
+            borderColor={COLORS.border}
+            backgroundColor="rgba(0,0,0,0.35)"
+          />
+        )}
       </View>
       <View style={styles.playerInfo}>
         <Text style={styles.playerName}>{name || "You"}</Text>
@@ -65,9 +94,27 @@ function PlayerCard({ name, index, isHuman }: { name: string; index: number; isH
 
 export default function VsSetupScreen() {
   const { startVsGame } = useGame();
+  const { user } = useAuth();
+  const { displayName: savedName, avatarIndex } = useSettings();
   const insets = useSafeAreaInsets();
   const [playerName, setPlayerName] = useState("You");
   const [botCount, setBotCount] = useState(2);
+
+  const syncNameFromProfile = useCallback(() => {
+    const resolved = resolvePlayerDisplayName({
+      localName: savedName,
+      authDisplayName: user?.user_metadata?.display_name,
+      email: user?.email ?? null,
+      fallback: "You",
+    });
+    setPlayerName(resolved);
+  }, [savedName, user?.user_metadata?.display_name, user?.email]);
+
+  useFocusEffect(
+    useCallback(() => {
+      syncNameFromProfile();
+    }, [syncNameFromProfile])
+  );
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
@@ -145,7 +192,7 @@ export default function VsSetupScreen() {
               onChangeText={setPlayerName}
               placeholder="Enter your name"
               placeholderTextColor={COLORS.textDim}
-              maxLength={16}
+              maxLength={24}
               returnKeyType="done"
               selectionColor={COLORS.orange}
             />
@@ -192,9 +239,9 @@ export default function VsSetupScreen() {
         <Animated.View entering={FadeIn.delay(300)} style={styles.section}>
           <Text style={styles.label}>TABLE · {totalPlayers} PLAYERS</Text>
           <View style={styles.playerPreview}>
-            <PlayerCard name={playerName || "You"} index={0} isHuman />
+            <PlayerCard name={playerName || "You"} index={0} isHuman avatarIndex={avatarIndex} />
             {BOT_NAMES.slice(0, botCount).map((name, idx) => (
-              <PlayerCard key={name} name={name} index={idx + 1} isHuman={false} />
+              <PlayerCard key={name} name={name} index={idx + 1} isHuman={false} botAvatarIndex={idx} />
             ))}
           </View>
         </Animated.View>

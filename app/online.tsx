@@ -8,7 +8,6 @@ import {
   Platform,
   Image,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
@@ -16,11 +15,11 @@ import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import Svg, { Circle } from "react-native-svg";
 import * as Haptics from "expo-haptics";
 import COLORS from "@/constants/colors";
+import { useAuth } from "@/context/AuthContext";
 import { useOnlineGame } from "@/context/OnlineGameContext";
 import { apiRequest } from "@/lib/query-client";
+import { resolveOnlineAnalyticsUserId } from "@/lib/online-analytics-user-id";
 import { useResponsive } from "@/lib/responsive";
-
-const STORAGE_ONLINE_USER_ID = "@noshow/online_user_id";
 const LEVEL_IMAGES: Record<number, number> = {
   1: require("@/assets/images/levels/beginner-table.png"),
   2: require("@/assets/images/levels/chip-collector.png"),
@@ -52,11 +51,12 @@ export default function OnlineScreen() {
   const [onlinePoints, setOnlinePoints] = useState(0);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const { joinQueue, error, resetOnline, userId } = useOnlineGame();
+  const { user } = useAuth();
 
   useEffect(() => {
     (async () => {
       try {
-        const uid = userId ?? (await AsyncStorage.getItem(STORAGE_ONLINE_USER_ID));
+        const uid = await resolveOnlineAnalyticsUserId(user?.id ?? userId ?? undefined);
         if (!uid) return;
         const res = await apiRequest("GET", `/api/online/profile/${uid}`);
         const json = (await res.json()) as {
@@ -73,7 +73,7 @@ export default function OnlineScreen() {
         setLoadingProfile(false);
       }
     })();
-  }, [userId]);
+  }, [userId, user?.id]);
 
   const startQueue = async (mode: "online_2p" | "online_3p") => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);

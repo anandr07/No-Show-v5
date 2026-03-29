@@ -25,6 +25,9 @@ import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from "@expo/vector-ico
 import * as Haptics from "expo-haptics";
 import COLORS from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { useSettings } from "@/context/SettingsContext";
+import { resolvePlayerDisplayName } from "@/lib/player-display";
+import { PlayerAvatarImage } from "@/components/PlayerAvatarImage";
 import { playTap } from "@/lib/sound";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
@@ -157,10 +160,13 @@ interface PlayerMenuProps {
 
 function PlayerMenu({ visible, onClose, topInset }: PlayerMenuProps) {
   const { user } = useAuth();
-  const displayName =
-    user?.user_metadata?.display_name ??
-    user?.email?.split("@")[0] ??
-    "Guest";
+  const { displayName: savedName, avatarIndex } = useSettings();
+  const displayName = resolvePlayerDisplayName({
+    localName: savedName,
+    authDisplayName: user?.user_metadata?.display_name,
+    email: user?.email ?? null,
+    fallback: "Guest",
+  });
 
   const menuItems = [
     {
@@ -224,7 +230,16 @@ function PlayerMenu({ visible, onClose, topInset }: PlayerMenuProps) {
               onPress={item.onPress}
             >
               <View style={styles.playerMenuIconWrap}>
-                <Ionicons name={item.icon} size={18} color={COLORS.gold} />
+                {item.id === "username" ? (
+                  <PlayerAvatarImage
+                    avatarIndex={avatarIndex}
+                    size={28}
+                    borderColor="rgba(255,215,0,0.35)"
+                    backgroundColor="rgba(0,0,0,0.4)"
+                  />
+                ) : (
+                  <Ionicons name={item.icon} size={18} color={COLORS.gold} />
+                )}
               </View>
               <View style={styles.playerMenuTextWrap}>
                 <Text style={styles.playerMenuLabel}>{item.label}</Text>

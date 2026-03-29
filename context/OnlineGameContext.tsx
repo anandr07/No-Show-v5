@@ -7,9 +7,13 @@ import React, {
   useRef,
   useState,
 } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { GameState, Card } from "@/lib/gameEngine";
 import { getWebSocketUrl } from "@/lib/query-client";
+import { useAuth } from "@/context/AuthContext";
+import {
+  ensureGuestOnlineUserId,
+  isValidUuid,
+} from "@/lib/online-analytics-user-id";
 
 type QueueMode = "online_2p" | "online_3p";
 type OnlinePhase = "idle" | "queueing" | "matched" | "playing" | "finished";
@@ -48,18 +52,10 @@ interface OnlineGameContextValue {
   nextRound: () => void;
 }
 
-const STORAGE_ONLINE_USER_ID = "@noshow/online_user_id";
 const OnlineGameContext = createContext<OnlineGameContextValue | null>(null);
 
-async function ensureOnlineUserId(): Promise<string> {
-  const existing = await AsyncStorage.getItem(STORAGE_ONLINE_USER_ID);
-  if (existing) return existing;
-  const created = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-  await AsyncStorage.setItem(STORAGE_ONLINE_USER_ID, created);
-  return created;
-}
-
 export function OnlineGameProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [phase, setPhase] = useState<OnlinePhase>("idle");
   const [mode, setMode] = useState<QueueMode | null>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);
@@ -144,7 +140,9 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
 
   const joinQueue = useCallback(async (queueMode: QueueMode, playerName: string) => {
     setError("");
-    const id = await ensureOnlineUserId();
+    const id = isValidUuid(user?.id)
+      ? user.id
+      : await ensureGuestOnlineUserId();
     setUserId(id);
     setMode(queueMode);
     setQueueStartedAt(Date.now());
@@ -160,7 +158,7 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
         })
       );
     };
-  }, [connectSocket]);
+  }, [connectSocket, user?.id]);
 
   const cancelQueue = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

@@ -9,17 +9,16 @@ import {
   Platform,
   useWindowDimensions,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import COLORS from "@/constants/colors";
+import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/query-client";
+import { resolveOnlineAnalyticsUserId } from "@/lib/online-analytics-user-id";
 import { useResponsive } from "@/lib/responsive";
-
-const STORAGE_ONLINE_USER_ID = "@noshow/online_user_id";
 
 const LEVELS = [
   { level: 1, name: "Beginner Table", min: 0, max: 999 },
@@ -53,11 +52,12 @@ export default function LevelsMapScreen() {
   const isLandscape = width > height;
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const [points, setPoints] = useState(0);
+  const { user } = useAuth();
 
   useEffect(() => {
     (async () => {
       try {
-        const uid = await AsyncStorage.getItem(STORAGE_ONLINE_USER_ID);
+        const uid = await resolveOnlineAnalyticsUserId(user?.id);
         if (!uid) return;
         const res = await apiRequest("GET", `/api/online/profile/${uid}`);
         const json = (await res.json()) as { stats?: { online_points_total?: number } };
@@ -67,7 +67,7 @@ export default function LevelsMapScreen() {
         // ignore
       }
     })();
-  }, []);
+  }, [user?.id]);
 
   const current = useMemo(() => getCurrentLevel(points), [points]);
   const cardSize = useMemo(() => {
