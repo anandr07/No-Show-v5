@@ -47,7 +47,10 @@ import {
 } from "@/lib/gameEngine";
 import COLORS, { AVATAR_COLORS } from "@/constants/colors";
 import { FlightCard } from "@/components/FlightCard";
+import { GameQuickChatFab, GameQuickChatSheet } from "@/components/GameQuickChatDock";
+import { QuickChatBubble } from "@/components/QuickChatBubble";
 import { useGameCardFlightAnimations } from "@/hooks/useGameCardFlightAnimations";
+import { useQuickChatBubbles } from "@/hooks/useQuickChatBubbles";
 import { getVsPlayerScreenPos } from "@/lib/game-card-flight-positions";
 
 const { height: SCREEN_H } = Dimensions.get("window");
@@ -62,9 +65,10 @@ interface OppZoneProps {
   isBot?: boolean;
   /** When `isBot`, index 0..2 among bot opponents for portrait art. */
   botAvatarIndex?: number;
+  quickChatText?: string | null;
 }
 
-function OppZone({ player, isTurn, avatarColor, compact, isBot, botAvatarIndex = 0 }: OppZoneProps) {
+function OppZone({ player, isTurn, avatarColor, compact, isBot, botAvatarIndex = 0, quickChatText }: OppZoneProps) {
   const glow = useSharedValue(0);
 
   useEffect(() => {
@@ -92,6 +96,11 @@ function OppZone({ player, isTurn, avatarColor, compact, isBot, botAvatarIndex =
 
   return (
     <View style={compact ? styles.oppZoneCompact : styles.oppZone}>
+      {quickChatText ? (
+        <View style={styles.oppChatAbove}>
+          <QuickChatBubble text={quickChatText} />
+        </View>
+      ) : null}
       <Animated.View style={[styles.oppAvatarRing, compact && styles.oppAvatarRingCompact, glowStyle]}>
         {isBot ? (
           <BotAvatarImage
@@ -142,6 +151,7 @@ export default function GameScreen() {
   const [showReveal, setShowReveal] = useState(false);
   const [showConfirmShow, setShowConfirmShow] = useState(false);
   const [throwError, setThrowError] = useState("");
+  const [quickChatOpen, setQuickChatOpen] = useState(false);
   const notifRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const vsHumanIdx = state.players.findIndex((p) => p.type === "human");
@@ -160,6 +170,8 @@ export default function GameScreen() {
     state.currentPlayerIndex,
     state.players,
   );
+
+  const { pushBubble, textByPlayerId: quickChatByPlayer } = useQuickChatBubbles();
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
@@ -405,7 +417,8 @@ export default function GameScreen() {
           <View style={styles.oppNorthSingle}>
             <OppZone player={opp1} isTurn={opp1Idx === state.currentPlayerIndex}
               avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]} isBot
-              botAvatarIndex={opponents.findIndex((o) => o.id === opp1.id)} />
+              botAvatarIndex={opponents.findIndex((o) => o.id === opp1.id)}
+              quickChatText={quickChatByPlayer.get(opp1.id) ?? null} />
           </View>
         )}
 
@@ -414,10 +427,12 @@ export default function GameScreen() {
           <View style={styles.oppNorthRow}>
             {opp1 && <OppZone player={opp1} isTurn={opp1Idx === state.currentPlayerIndex}
               avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]} isBot
-              botAvatarIndex={opponents.findIndex((o) => o.id === opp1.id)} />}
+              botAvatarIndex={opponents.findIndex((o) => o.id === opp1.id)}
+              quickChatText={quickChatByPlayer.get(opp1.id) ?? null} />}
             {opp2 && <OppZone player={opp2} isTurn={opp2Idx === state.currentPlayerIndex}
               avatarColor={AVATAR_COLORS[opp2Idx % AVATAR_COLORS.length]} isBot
-              botAvatarIndex={opponents.findIndex((o) => o.id === opp2.id)} />}
+              botAvatarIndex={opponents.findIndex((o) => o.id === opp2.id)}
+              quickChatText={quickChatByPlayer.get(opp2.id) ?? null} />}
           </View>
         )}
 
@@ -426,7 +441,8 @@ export default function GameScreen() {
           <View style={styles.oppNorthSingle}>
             <OppZone player={opp1} isTurn={opp1Idx === state.currentPlayerIndex}
               avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]} isBot
-              botAvatarIndex={opponents.findIndex((o) => o.id === opp1.id)} />
+              botAvatarIndex={opponents.findIndex((o) => o.id === opp1.id)}
+              quickChatText={quickChatByPlayer.get(opp1.id) ?? null} />
           </View>
         )}
 
@@ -436,7 +452,8 @@ export default function GameScreen() {
             <View style={styles.sideOpp}>
               <OppZone player={opp2} isTurn={opp2Idx === state.currentPlayerIndex}
                 avatarColor={AVATAR_COLORS[opp2Idx % AVATAR_COLORS.length]} compact isBot
-                botAvatarIndex={opponents.findIndex((o) => o.id === opp2.id)} />
+                botAvatarIndex={opponents.findIndex((o) => o.id === opp2.id)}
+                quickChatText={quickChatByPlayer.get(opp2.id) ?? null} />
             </View>
           )}
 
@@ -446,7 +463,8 @@ export default function GameScreen() {
             <View style={styles.sideOpp}>
               <OppZone player={opp3} isTurn={opp3Idx === state.currentPlayerIndex}
                 avatarColor={AVATAR_COLORS[opp3Idx % AVATAR_COLORS.length]} compact isBot
-                botAvatarIndex={opponents.findIndex((o) => o.id === opp3.id)} />
+                botAvatarIndex={opponents.findIndex((o) => o.id === opp3.id)}
+                quickChatText={quickChatByPlayer.get(opp3.id) ?? null} />
             </View>
           )}
         </View>
@@ -473,6 +491,7 @@ export default function GameScreen() {
           </View>
 
           <View style={styles.handRow}>
+            <GameQuickChatFab onPress={() => setQuickChatOpen(true)} />
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -505,17 +524,24 @@ export default function GameScreen() {
 
             <View style={styles.meAside} pointerEvents="box-none">
               <View style={styles.meAsideInner}>
-                <View style={styles.meAvatar}>
-                  <PlayerAvatarImage
-                    avatarIndex={avatarIndex}
-                    size={54}
-                    borderColor={COLORS.border}
-                    backgroundColor="rgba(0,0,0,0.35)"
-                  />
-                </View>
-                <View style={styles.meAsideTextCol}>
-                  <Text style={styles.meName} numberOfLines={1}>{youRowName}</Text>
-                  <Text style={styles.meScore}>{humanPlayer?.totalScore ?? 0} pts</Text>
+                {humanPlayer && quickChatByPlayer.get(humanPlayer.id) ? (
+                  <View style={styles.meChatAbove}>
+                    <QuickChatBubble text={quickChatByPlayer.get(humanPlayer.id)!} />
+                  </View>
+                ) : null}
+                <View style={styles.meAsideRow}>
+                  <View style={styles.meAvatar}>
+                    <PlayerAvatarImage
+                      avatarIndex={avatarIndex}
+                      size={54}
+                      borderColor={COLORS.border}
+                      backgroundColor="rgba(0,0,0,0.35)"
+                    />
+                  </View>
+                  <View style={styles.meAsideTextCol}>
+                    <Text style={styles.meName} numberOfLines={1}>{youRowName}</Text>
+                    <Text style={styles.meScore}>{humanPlayer?.totalScore ?? 0} pts</Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -552,6 +578,14 @@ export default function GameScreen() {
           </View>
         </View>
       </View>
+
+      <GameQuickChatSheet
+        open={quickChatOpen}
+        onOpenChange={setQuickChatOpen}
+        onPick={(messageId) => {
+          if (humanPlayer) pushBubble(humanPlayer.id, messageId);
+        }}
+      />
 
       {/* ── TOP BAR OVERLAY ── */}
       <View style={[styles.topBar, { top: topInset + 4, left: leftInset + 8, right: rightInset + 8 }]}>
@@ -854,6 +888,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     paddingHorizontal: 20,
   },
+  oppChatAbove: {
+    alignItems: "center",
+    marginBottom: 4,
+    maxWidth: 200,
+  },
   oppZone: {
     alignItems: "center",
     gap: 3,
@@ -1055,10 +1094,20 @@ const styles = StyleSheet.create({
     paddingLeft: 0,
   },
   meAsideInner: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    gap: 4,
+  },
+  meAsideRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
     gap: 6,
+  },
+  meChatAbove: {
+    alignSelf: "flex-start",
+    maxWidth: 170,
   },
   meAsideTextCol: {
     flexShrink: 1,

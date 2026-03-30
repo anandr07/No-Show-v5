@@ -10,6 +10,9 @@ import { Share, Alert } from "react-native";
 import { router } from "expo-router";
 import type { GameState, Card } from "@/lib/gameEngine";
 import { getWebSocketUrl } from "@/lib/query-client";
+import { isValidQuickChatMessageId, type QuickChatEvent } from "@/constants/quickChatMessages";
+
+export type { QuickChatEvent };
 
 type MultiplayerPhase = "idle" | "lobby" | "playing";
 
@@ -55,6 +58,8 @@ interface MultiplayerContextValue {
   resetToLobby: () => void;
 
   selectedCards: string[];
+  quickChatEvents: QuickChatEvent[];
+  sendQuickChat: (messageId: number) => void;
 }
 
 const MultiplayerContext = createContext<MultiplayerContextValue | null>(null);
@@ -68,6 +73,7 @@ export function MultiplayerGameProvider({ children }: { children: React.ReactNod
   const [error, setError] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
+  const [quickChatEvents, setQuickChatEvents] = useState<QuickChatEvent[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const pendingActionRef = useRef<"create" | "join" | null>(null);
@@ -80,6 +86,14 @@ export function MultiplayerGameProvider({ children }: { children: React.ReactNod
       wsRef.current = null;
     }
     pendingActionRef.current = null;
+  }, []);
+
+  const pushQuickChat = useCallback((playerId: string, messageId: number) => {
+    const id = `qc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setQuickChatEvents((prev) => [...prev.filter((b) => b.playerId !== playerId), { id, playerId, messageId }]);
+    setTimeout(() => {
+      setQuickChatEvents((prev) => prev.filter((b) => b.id !== id));
+    }, 4500);
   }, []);
 
   const handleMessage = useCallback(
@@ -104,9 +118,16 @@ export function MultiplayerGameProvider({ children }: { children: React.ReactNod
           setRoom({ ...roomData, players: [...(roomData.players || [])] });
         }
       } else if (msg.type === "GAME_STARTED") {
+        setQuickChatEvents([]);
         setGameState(msg.state as GameState);
         setPhase("playing");
         router.replace("/game-multiplayer");
+      } else if (msg.type === "QUICK_CHAT") {
+        const pid = msg.playerId as string;
+        const mid = msg.messageId;
+        if (typeof pid === "string" && isValidQuickChatMessageId(mid)) {
+          pushQuickChat(pid, mid);
+        }
       } else if (msg.type === "GAME_STATE_UPDATE") {
         setGameState(msg.state as GameState);
         setError(""); // Clear any prior action error on successful state update
@@ -138,7 +159,7 @@ export function MultiplayerGameProvider({ children }: { children: React.ReactNod
         setError(msg.message as string);
       }
     },
-    [closeWs]
+    [closeWs, pushQuickChat]
   );
 
   const connectAndSend = useCallback(
@@ -231,6 +252,7 @@ export function MultiplayerGameProvider({ children }: { children: React.ReactNod
     setPlayerId(null);
     setRoomCode(null);
     setSelectedCards([]);
+    setQuickChatEvents([]);
   }, [closeWs]);
 
   const quitGame = useCallback(() => {
@@ -244,6 +266,7 @@ export function MultiplayerGameProvider({ children }: { children: React.ReactNod
     setPlayerId(null);
     setRoomCode(null);
     setSelectedCards([]);
+    setQuickChatEvents([]);
     router.replace("/");
   }, [closeWs]);
 
@@ -258,6 +281,7 @@ export function MultiplayerGameProvider({ children }: { children: React.ReactNod
     setPlayerId(null);
     setRoomCode(null);
     setSelectedCards([]);
+    setQuickChatEvents([]);
   }, [closeWs]);
 
   const shareCode = useCallback(() => {
@@ -269,6 +293,12 @@ export function MultiplayerGameProvider({ children }: { children: React.ReactNod
   const sendAction = useCallback((action: object) => {
     if (wsRef.current) {
       wsRef.current.send(JSON.stringify({ type: "GAME_ACTION", action }));
+    }
+  }, []);
+
+  const sendQuickChat = useCallback((messageId: number) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "QUICK_CHAT", messageId }));
     }
   }, []);
 
@@ -351,6 +381,8 @@ export function MultiplayerGameProvider({ children }: { children: React.ReactNod
         nextRound,
         quitGame,
         resetToLobby,
+        quickChatEvents,
+        sendQuickChat,
       }}
     >
       {children}

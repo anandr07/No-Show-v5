@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -51,6 +51,9 @@ import COLORS, { AVATAR_COLORS } from "@/constants/colors";
 import { FlightCard } from "@/components/FlightCard";
 import { useGameCardFlightAnimations } from "@/hooks/useGameCardFlightAnimations";
 import { getSeatScreenPosForLocalPlayer } from "@/lib/game-card-flight-positions";
+import { GameQuickChatFab, GameQuickChatSheet } from "@/components/GameQuickChatDock";
+import { QuickChatBubble } from "@/components/QuickChatBubble";
+import { getQuickChatText, type QuickChatEvent } from "@/constants/quickChatMessages";
 
 const { height: SCREEN_H } = Dimensions.get("window");
 
@@ -63,9 +66,10 @@ interface OppZoneProps {
   compact?: boolean;
   isBot?: boolean;
   botAvatarIndex?: number;
+  quickChatText?: string | null;
 }
 
-function OppZone({ player, isTurn, avatarColor, compact, isBot, botAvatarIndex = 0 }: OppZoneProps) {
+function OppZone({ player, isTurn, avatarColor, compact, isBot, botAvatarIndex = 0, quickChatText }: OppZoneProps) {
   const glow = useSharedValue(0);
 
   useEffect(() => {
@@ -92,6 +96,11 @@ function OppZone({ player, isTurn, avatarColor, compact, isBot, botAvatarIndex =
 
   return (
     <View style={compact ? styles.oppZoneCompact : styles.oppZone}>
+      {quickChatText ? (
+        <View style={styles.oppChatAbove}>
+          <QuickChatBubble text={quickChatText} />
+        </View>
+      ) : null}
       <Animated.View style={[styles.oppAvatarRing, compact && styles.oppAvatarRingCompact, glowStyle]}>
         {isBot ? (
           <BotAvatarImage
@@ -141,6 +150,8 @@ interface GameOnlineTableProps {
   selectedCards: string[];
   contextError: string;
   clearError: () => void;
+  quickChatEvents: QuickChatEvent[];
+  sendQuickChat: (messageId: number) => void;
 }
 
 function GameOnlineTable({
@@ -158,6 +169,8 @@ function GameOnlineTable({
   selectedCards,
   contextError,
   clearError,
+  quickChatEvents,
+  sendQuickChat,
 }: GameOnlineTableProps) {
   const isOpponentBot = (opponentId: string) =>
     onlineRoster.find((r) => r.id === opponentId)?.isBot ?? false;
@@ -170,6 +183,7 @@ function GameOnlineTable({
   const [showReveal, setShowReveal] = useState(false);
   const [showConfirmShow, setShowConfirmShow] = useState(false);
   const [throwError, setThrowError] = useState("");
+  const [quickChatOpen, setQuickChatOpen] = useState(false);
   const notifRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getPlayerScreenPos = useCallback(
@@ -345,6 +359,15 @@ function GameOnlineTable({
   const opp2Idx = opp2 ? state.players.findIndex((p) => p.id === opp2.id) : -1;
   const opp3Idx = opp3 ? state.players.findIndex((p) => p.id === opp3.id) : -1;
 
+  const quickChatByPlayer = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of quickChatEvents) {
+      const t = getQuickChatText(e.messageId);
+      if (t) m.set(e.playerId, t);
+    }
+    return m;
+  }, [quickChatEvents]);
+
   const CenterPiles = () => (
     <View style={styles.centerPiles}>
       <View style={styles.pilesRow}>
@@ -444,7 +467,8 @@ function GameOnlineTable({
           <View style={styles.oppNorthSingle}>
             <OppZone player={opp1} isTurn={opp1Idx === state.currentPlayerIndex}
               avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]} isBot={isOpponentBot(opp1.id)}
-              botAvatarIndex={botAvatarIndexForPlayer(opponents, opp1.id, isOpponentBot) ?? 0} />
+              botAvatarIndex={botAvatarIndexForPlayer(opponents, opp1.id, isOpponentBot) ?? 0}
+              quickChatText={quickChatByPlayer.get(opp1.id) ?? null} />
           </View>
         )}
 
@@ -453,10 +477,12 @@ function GameOnlineTable({
           <View style={styles.oppNorthRow}>
             {opp1 && <OppZone player={opp1} isTurn={opp1Idx === state.currentPlayerIndex}
               avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]} isBot={isOpponentBot(opp1.id)}
-              botAvatarIndex={botAvatarIndexForPlayer(opponents, opp1.id, isOpponentBot) ?? 0} />}
+              botAvatarIndex={botAvatarIndexForPlayer(opponents, opp1.id, isOpponentBot) ?? 0}
+              quickChatText={quickChatByPlayer.get(opp1.id) ?? null} />}
             {opp2 && <OppZone player={opp2} isTurn={opp2Idx === state.currentPlayerIndex}
               avatarColor={AVATAR_COLORS[opp2Idx % AVATAR_COLORS.length]} isBot={isOpponentBot(opp2.id)}
-              botAvatarIndex={botAvatarIndexForPlayer(opponents, opp2.id, isOpponentBot) ?? 0} />}
+              botAvatarIndex={botAvatarIndexForPlayer(opponents, opp2.id, isOpponentBot) ?? 0}
+              quickChatText={quickChatByPlayer.get(opp2.id) ?? null} />}
           </View>
         )}
 
@@ -465,7 +491,8 @@ function GameOnlineTable({
           <View style={styles.oppNorthSingle}>
             <OppZone player={opp1} isTurn={opp1Idx === state.currentPlayerIndex}
               avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]} isBot={isOpponentBot(opp1.id)}
-              botAvatarIndex={botAvatarIndexForPlayer(opponents, opp1.id, isOpponentBot) ?? 0} />
+              botAvatarIndex={botAvatarIndexForPlayer(opponents, opp1.id, isOpponentBot) ?? 0}
+              quickChatText={quickChatByPlayer.get(opp1.id) ?? null} />
           </View>
         )}
 
@@ -475,7 +502,8 @@ function GameOnlineTable({
             <View style={styles.sideOpp}>
               <OppZone player={opp2} isTurn={opp2Idx === state.currentPlayerIndex}
                 avatarColor={AVATAR_COLORS[opp2Idx % AVATAR_COLORS.length]} compact isBot={isOpponentBot(opp2.id)}
-                botAvatarIndex={botAvatarIndexForPlayer(opponents, opp2.id, isOpponentBot) ?? 0} />
+                botAvatarIndex={botAvatarIndexForPlayer(opponents, opp2.id, isOpponentBot) ?? 0}
+                quickChatText={quickChatByPlayer.get(opp2.id) ?? null} />
             </View>
           )}
 
@@ -485,7 +513,8 @@ function GameOnlineTable({
             <View style={styles.sideOpp}>
               <OppZone player={opp3} isTurn={opp3Idx === state.currentPlayerIndex}
                 avatarColor={AVATAR_COLORS[opp3Idx % AVATAR_COLORS.length]} compact isBot={isOpponentBot(opp3.id)}
-                botAvatarIndex={botAvatarIndexForPlayer(opponents, opp3.id, isOpponentBot) ?? 0} />
+                botAvatarIndex={botAvatarIndexForPlayer(opponents, opp3.id, isOpponentBot) ?? 0}
+                quickChatText={quickChatByPlayer.get(opp3.id) ?? null} />
             </View>
           )}
         </View>
@@ -549,17 +578,24 @@ function GameOnlineTable({
 
             <View style={styles.meAside} pointerEvents="box-none">
               <View style={styles.meAsideInner}>
-                <View style={styles.meAvatar}>
-                  <PlayerAvatarImage
-                    avatarIndex={avatarIndex}
-                    size={54}
-                    borderColor={COLORS.border}
-                    backgroundColor="rgba(0,0,0,0.35)"
-                  />
-                </View>
-                <View style={styles.meAsideTextCol}>
-                  <Text style={styles.meName} numberOfLines={1}>{youRowName}</Text>
-                  <Text style={styles.meScore}>{humanPlayer?.totalScore ?? 0} pts</Text>
+                {humanPlayer && quickChatByPlayer.get(humanPlayer.id) ? (
+                  <View style={styles.meChatAbove}>
+                    <QuickChatBubble text={quickChatByPlayer.get(humanPlayer.id)!} />
+                  </View>
+                ) : null}
+                <View style={styles.meAsideRow}>
+                  <View style={styles.meAvatar}>
+                    <PlayerAvatarImage
+                      avatarIndex={avatarIndex}
+                      size={54}
+                      borderColor={COLORS.border}
+                      backgroundColor="rgba(0,0,0,0.35)"
+                    />
+                  </View>
+                  <View style={styles.meAsideTextCol}>
+                    <Text style={styles.meName} numberOfLines={1}>{youRowName}</Text>
+                    <Text style={styles.meScore}>{humanPlayer?.totalScore ?? 0} pts</Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -596,6 +632,12 @@ function GameOnlineTable({
           </View>
         </View>
       </View>
+
+      <GameQuickChatSheet
+        open={quickChatOpen}
+        onOpenChange={setQuickChatOpen}
+        onPick={sendQuickChat}
+      />
 
       {/* ── TOP BAR OVERLAY ── */}
       <View style={[styles.topBar, { top: topInset + 4, left: leftInset + 8, right: rightInset + 8 }]}>
@@ -902,6 +944,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     paddingHorizontal: 20,
   },
+  oppChatAbove: {
+    alignItems: "center",
+    marginBottom: 4,
+    maxWidth: 200,
+  },
   oppZone: {
     alignItems: "center",
     gap: 3,
@@ -1103,10 +1150,20 @@ const styles = StyleSheet.create({
     paddingLeft: 0,
   },
   meAsideInner: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    gap: 4,
+  },
+  meAsideRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
     gap: 6,
+  },
+  meChatAbove: {
+    alignSelf: "flex-start",
+    maxWidth: 170,
   },
   meAsideTextCol: {
     flexShrink: 1,
@@ -1560,6 +1617,8 @@ export default function GameOnlineScreen() {
       selectedCards={online.selectedCards}
       contextError={online.error}
       clearError={online.clearError}
+      quickChatEvents={online.quickChatEvents}
+      sendQuickChat={online.sendQuickChat}
     />
   );
 }

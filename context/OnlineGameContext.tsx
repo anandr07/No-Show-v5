@@ -14,6 +14,7 @@ import {
   ensureGuestOnlineUserId,
   isValidUuid,
 } from "@/lib/online-analytics-user-id";
+import { isValidQuickChatMessageId, type QuickChatEvent } from "@/constants/quickChatMessages";
 
 type QueueMode = "online_2p" | "online_3p";
 type OnlinePhase = "idle" | "queueing" | "matched" | "playing" | "finished";
@@ -50,6 +51,8 @@ interface OnlineGameContextValue {
   pickFromThrown: (card: Card) => void;
   callShow: () => void;
   nextRound: () => void;
+  quickChatEvents: QuickChatEvent[];
+  sendQuickChat: (messageId: number) => void;
 }
 
 const OnlineGameContext = createContext<OnlineGameContextValue | null>(null);
@@ -67,6 +70,7 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
   const [isBotFilled, setIsBotFilled] = useState(false);
   const [queueStartedAt, setQueueStartedAt] = useState<number | null>(null);
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
+  const [quickChatEvents, setQuickChatEvents] = useState<QuickChatEvent[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -75,6 +79,14 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
       wsRef.current.close();
       wsRef.current = null;
     }
+  }, []);
+
+  const pushQuickChat = useCallback((playerId: string, messageId: number) => {
+    const id = `qc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setQuickChatEvents((prev) => [...prev.filter((b) => b.playerId !== playerId), { id, playerId, messageId }]);
+    setTimeout(() => {
+      setQuickChatEvents((prev) => prev.filter((b) => b.id !== id));
+    }, 4500);
   }, []);
 
   const handleMessage = useCallback((msg: { type: string; [key: string]: unknown }) => {
@@ -89,6 +101,7 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
     }
 
     if (msg.type === "MATCH_FOUND") {
+      setQuickChatEvents([]);
       setPhase("playing");
       setMatchId(msg.matchId as string);
       setPlayerId((msg.playerId as string) ?? null);
@@ -97,6 +110,15 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
       setIsBotFilled(Boolean(msg.isBotFilled));
       setError("");
       setSelectedCards([]);
+      return;
+    }
+
+    if (msg.type === "ONLINE_QUICK_CHAT") {
+      const pid = msg.playerId as string;
+      const mid = msg.messageId;
+      if (typeof pid === "string" && isValidQuickChatMessageId(mid)) {
+        pushQuickChat(pid, mid);
+      }
       return;
     }
 
@@ -115,7 +137,7 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
       setError(String(msg.message ?? "Online error"));
       return;
     }
-  }, []);
+  }, [pushQuickChat]);
 
   const connectSocket = useCallback(() => {
     const wsUrl = getWebSocketUrl("/ws-online");
@@ -179,6 +201,11 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
     );
   }, []);
 
+  const sendQuickChat = useCallback((messageId: number) => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({ type: "ONLINE_QUICK_CHAT", messageId }));
+  }, []);
+
   const clearError = useCallback(() => setError(""), []);
 
   const selectCard = useCallback((cardId: string) => {
@@ -240,6 +267,7 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
     setQueueStartedAt(null);
     setIsBotFilled(false);
     setSelectedCards([]);
+    setQuickChatEvents([]);
   }, [closeSocket]);
 
   const value = useMemo<OnlineGameContextValue>(
@@ -268,6 +296,8 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
       pickFromThrown,
       callShow,
       nextRound,
+      quickChatEvents,
+      sendQuickChat,
     }),
     [
       phase,
@@ -294,6 +324,8 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
       pickFromThrown,
       callShow,
       nextRound,
+      quickChatEvents,
+      sendQuickChat,
     ]
   );
 

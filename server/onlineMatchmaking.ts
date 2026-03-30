@@ -12,6 +12,7 @@ import {
 import { getDb } from "./db";
 import { OnlineGameService, type OnlinePlayer } from "./onlineGameService";
 import type { GameAction } from "./gameState";
+import { isValidQuickChatMessageId } from "../constants/quickChatMessages";
 
 type Mode = "online_2p" | "online_3p";
 
@@ -244,6 +245,23 @@ export class OnlineMatchmakingService {
         this.broadcastMatchState(client.matchId, botTurn.finalState);
       }
       await this.tryFinalizeMatch(client.matchId);
+      return;
+    }
+
+    if (msg.type === "ONLINE_QUICK_CHAT") {
+      const client = this.clients.get(ws);
+      if (!client?.matchId || !client.playerId) return;
+      const messageId = Number(msg.messageId);
+      if (!isValidQuickChatMessageId(messageId)) return;
+      for (const c of this.clients.values()) {
+        if (c.matchId === client.matchId) {
+          send(c.ws, {
+            type: "ONLINE_QUICK_CHAT",
+            playerId: client.playerId,
+            messageId,
+          });
+        }
+      }
       return;
     }
   }

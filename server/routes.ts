@@ -11,6 +11,7 @@ import {
 import { registerAuthRoutes } from "./auth";
 import { OnlineMatchmakingService } from "./onlineMatchmaking";
 import { isSupabaseConfigured } from "./supabase";
+import { isValidQuickChatMessageId } from "../constants/quickChatMessages";
 
 interface RoomPlayer {
   id: string;
@@ -221,6 +222,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           type: "GAME_STARTED",
           state: room.gameState,
           players: playerData,
+        });
+      }
+
+      else if (msg.type === "QUICK_CHAT") {
+        if (!currentRoomCode || !currentPlayerId) return;
+        const room = rooms.get(currentRoomCode);
+        if (!room) return;
+        if (room.phase !== "playing") return;
+        const messageId = Number(msg.messageId);
+        if (!isValidQuickChatMessageId(messageId)) return;
+        broadcastToAll(room, {
+          type: "QUICK_CHAT",
+          playerId: currentPlayerId,
+          messageId,
         });
       }
 

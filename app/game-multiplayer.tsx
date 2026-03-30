@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -44,6 +44,9 @@ import COLORS, { AVATAR_COLORS } from "@/constants/colors";
 import { FlightCard } from "@/components/FlightCard";
 import { useGameCardFlightAnimations } from "@/hooks/useGameCardFlightAnimations";
 import { getSeatScreenPosForLocalPlayer } from "@/lib/game-card-flight-positions";
+import { GameQuickChatFab, GameQuickChatSheet } from "@/components/GameQuickChatDock";
+import { QuickChatBubble } from "@/components/QuickChatBubble";
+import { getQuickChatText } from "@/constants/quickChatMessages";
 
 const GAME_TABLE_BACKGROUND = require("@/assets/images/game-table-background.png");
 
@@ -54,9 +57,10 @@ interface OppZoneProps {
   compact?: boolean;
   isBot?: boolean;
   botAvatarIndex?: number;
+  quickChatText?: string | null;
 }
 
-function OppZone({ player, isTurn, avatarColor, compact, isBot, botAvatarIndex = 0 }: OppZoneProps) {
+function OppZone({ player, isTurn, avatarColor, compact, isBot, botAvatarIndex = 0, quickChatText }: OppZoneProps) {
   const glow = useSharedValue(0);
 
   useEffect(() => {
@@ -83,6 +87,11 @@ function OppZone({ player, isTurn, avatarColor, compact, isBot, botAvatarIndex =
 
   return (
     <View style={compact ? styles.oppZoneCompact : styles.oppZone}>
+      {quickChatText ? (
+        <View style={styles.oppChatAbove}>
+          <QuickChatBubble text={quickChatText} />
+        </View>
+      ) : null}
       <Animated.View style={[styles.oppAvatarRing, compact && styles.oppAvatarRingCompact, glowStyle]}>
         {isBot ? (
           <BotAvatarImage
@@ -126,6 +135,8 @@ export default function GameMultiplayerScreen() {
     nextRound,
     quitGame,
     selectedCards,
+    quickChatEvents,
+    sendQuickChat,
   } = useMultiplayerGame();
 
   const insets = useSafeAreaInsets();
@@ -133,6 +144,7 @@ export default function GameMultiplayerScreen() {
   const [showReveal, setShowReveal] = useState(false);
   const [showConfirmShow, setShowConfirmShow] = useState(false);
   const [throwError, setThrowError] = useState("");
+  const [quickChatOpen, setQuickChatOpen] = useState(false);
   const notifRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pulse = useSharedValue(1);
@@ -318,6 +330,15 @@ export default function GameMultiplayerScreen() {
   const opp2Idx = opp2 ? state.players.findIndex((p) => p.id === opp2.id) : -1;
   const opp3Idx = opp3 ? state.players.findIndex((p) => p.id === opp3.id) : -1;
 
+  const quickChatByPlayer = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of quickChatEvents) {
+      const t = getQuickChatText(e.messageId);
+      if (t) m.set(e.playerId, t);
+    }
+    return m;
+  }, [quickChatEvents]);
+
   const CenterPiles = () => (
     <View style={styles.centerPiles}>
       <View style={styles.pilesRow}>
@@ -408,6 +429,7 @@ export default function GameMultiplayerScreen() {
               isTurn={opp1Idx === state.currentPlayerIndex}
               avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]}
               isBot={false}
+              quickChatText={quickChatByPlayer.get(opp1.id) ?? null}
             />
           </View>
         )}
@@ -420,6 +442,7 @@ export default function GameMultiplayerScreen() {
                 isTurn={opp1Idx === state.currentPlayerIndex}
                 avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]}
                 isBot={false}
+                quickChatText={quickChatByPlayer.get(opp1.id) ?? null}
               />
             )}
             {opp2 && (
@@ -428,6 +451,7 @@ export default function GameMultiplayerScreen() {
                 isTurn={opp2Idx === state.currentPlayerIndex}
                 avatarColor={AVATAR_COLORS[opp2Idx % AVATAR_COLORS.length]}
                 isBot={false}
+                quickChatText={quickChatByPlayer.get(opp2.id) ?? null}
               />
             )}
           </View>
@@ -440,6 +464,7 @@ export default function GameMultiplayerScreen() {
               isTurn={opp1Idx === state.currentPlayerIndex}
               avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]}
               isBot={false}
+              quickChatText={quickChatByPlayer.get(opp1.id) ?? null}
             />
           </View>
         )}
@@ -453,6 +478,7 @@ export default function GameMultiplayerScreen() {
                 avatarColor={AVATAR_COLORS[opp2Idx % AVATAR_COLORS.length]}
                 compact
                 isBot={false}
+                quickChatText={quickChatByPlayer.get(opp2.id) ?? null}
               />
             </View>
           )}
@@ -467,6 +493,7 @@ export default function GameMultiplayerScreen() {
                 avatarColor={AVATAR_COLORS[opp3Idx % AVATAR_COLORS.length]}
                 compact
                 isBot={false}
+                quickChatText={quickChatByPlayer.get(opp3.id) ?? null}
               />
             </View>
           )}
@@ -498,6 +525,7 @@ export default function GameMultiplayerScreen() {
           </View>
 
           <View style={styles.handRow}>
+            <GameQuickChatFab onPress={() => setQuickChatOpen(true)} />
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -530,17 +558,24 @@ export default function GameMultiplayerScreen() {
 
             <View style={styles.meAside} pointerEvents="box-none">
               <View style={styles.meAsideInner}>
-                <View style={styles.meAvatar}>
-                  <PlayerAvatarImage
-                    avatarIndex={avatarIndex}
-                    size={54}
-                    borderColor={COLORS.border}
-                    backgroundColor="rgba(0,0,0,0.35)"
-                  />
-                </View>
-                <View style={styles.meAsideTextCol}>
-                  <Text style={styles.meName} numberOfLines={1}>{youRowName}</Text>
-                  <Text style={styles.meScore}>{humanPlayer?.totalScore ?? 0} pts</Text>
+                {humanPlayer && quickChatByPlayer.get(humanPlayer.id) ? (
+                  <View style={styles.meChatAbove}>
+                    <QuickChatBubble text={quickChatByPlayer.get(humanPlayer.id)!} />
+                  </View>
+                ) : null}
+                <View style={styles.meAsideRow}>
+                  <View style={styles.meAvatar}>
+                    <PlayerAvatarImage
+                      avatarIndex={avatarIndex}
+                      size={54}
+                      borderColor={COLORS.border}
+                      backgroundColor="rgba(0,0,0,0.35)"
+                    />
+                  </View>
+                  <View style={styles.meAsideTextCol}>
+                    <Text style={styles.meName} numberOfLines={1}>{youRowName}</Text>
+                    <Text style={styles.meScore}>{humanPlayer?.totalScore ?? 0} pts</Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -576,6 +611,12 @@ export default function GameMultiplayerScreen() {
           </View>
         </View>
       </View>
+
+      <GameQuickChatSheet
+        open={quickChatOpen}
+        onOpenChange={setQuickChatOpen}
+        onPick={sendQuickChat}
+      />
 
       <View style={[styles.topBar, { top: topInset + 4, left: leftInset + 8, right: rightInset + 8 }]}>
         <Pressable style={styles.iconBtn} onPress={handleQuit}>
@@ -782,6 +823,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     paddingHorizontal: 20,
   },
+  oppChatAbove: {
+    alignItems: "center",
+    marginBottom: 4,
+    maxWidth: 200,
+  },
   oppZone: {
     alignItems: "center",
     gap: 3,
@@ -981,10 +1027,20 @@ const styles = StyleSheet.create({
     paddingLeft: 0,
   },
   meAsideInner: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    gap: 4,
+  },
+  meAsideRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
     gap: 6,
+  },
+  meChatAbove: {
+    alignSelf: "flex-start",
+    maxWidth: 170,
   },
   meAsideTextCol: {
     flexShrink: 1,
