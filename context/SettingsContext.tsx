@@ -10,11 +10,14 @@ import { setSoundEnabled as setSoundEnabledInStore } from "@/lib/sound";
 import { sanitizeDisplayName } from "@/lib/player-display";
 import { clampAvatarIndex } from "@/constants/player-avatar";
 
+export type TableTheme = "green" | "blue" | "red";
+
 const STORAGE_KEYS = {
   SOUND_ENABLED: "@noshow/sound_enabled",
   NOTIFICATIONS_ENABLED: "@noshow/notifications_enabled",
   DISPLAY_NAME: "@noshow/display_name",
   AVATAR_INDEX: "@noshow/avatar_index",
+  TABLE_THEME: "@noshow/table_theme",
 } as const;
 
 interface SettingsContextValue {
@@ -24,10 +27,12 @@ interface SettingsContextValue {
   displayName: string;
   /** 0 .. PLAYER_AVATAR_COUNT - 1 */
   avatarIndex: number;
+  tableTheme: TableTheme;
   setSoundEnabled: (enabled: boolean) => Promise<void>;
   setNotificationsEnabled: (enabled: boolean) => Promise<void>;
   setDisplayName: (name: string) => Promise<void>;
   setAvatarIndex: (index: number) => Promise<void>;
+  setTableTheme: (theme: TableTheme) => Promise<void>;
   isLoading: boolean;
 }
 
@@ -38,16 +43,18 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [notificationsEnabled, setNotificationsEnabledState] = useState(true);
   const [displayName, setDisplayNameState] = useState("");
   const [avatarIndex, setAvatarIndexState] = useState(0);
+  const [tableTheme, setTableThemeState] = useState<TableTheme>("green");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const [sound, notif, name, avatar] = await Promise.all([
+        const [sound, notif, name, avatar, theme] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEYS.SOUND_ENABLED),
           AsyncStorage.getItem(STORAGE_KEYS.NOTIFICATIONS_ENABLED),
           AsyncStorage.getItem(STORAGE_KEYS.DISPLAY_NAME),
           AsyncStorage.getItem(STORAGE_KEYS.AVATAR_INDEX),
+          AsyncStorage.getItem(STORAGE_KEYS.TABLE_THEME),
         ]);
         if (sound !== null) {
           const enabled = sound === "true";
@@ -59,6 +66,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         if (avatar !== null) {
           const n = parseInt(avatar, 10);
           if (!Number.isNaN(n)) setAvatarIndexState(clampAvatarIndex(n));
+        }
+        if (theme === "green" || theme === "blue" || theme === "red") {
+          setTableThemeState(theme);
         }
       } catch {
         // ignore
@@ -107,6 +117,15 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const setTableTheme = useCallback(async (theme: TableTheme) => {
+    setTableThemeState(theme);
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.TABLE_THEME, theme);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   return (
     <SettingsContext.Provider
       value={{
@@ -114,10 +133,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         notificationsEnabled,
         displayName,
         avatarIndex,
+        tableTheme,
         setSoundEnabled,
         setNotificationsEnabled,
         setDisplayName,
         setAvatarIndex,
+        setTableTheme,
         isLoading,
       }}
     >
@@ -131,10 +152,12 @@ const defaultSettings: SettingsContextValue = {
   notificationsEnabled: true,
   displayName: "",
   avatarIndex: 0,
+  tableTheme: "green",
   setSoundEnabled: async () => {},
   setNotificationsEnabled: async () => {},
   setDisplayName: async () => {},
   setAvatarIndex: async () => {},
+  setTableTheme: async () => {},
   isLoading: false,
 };
 

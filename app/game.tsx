@@ -29,7 +29,11 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 
-const GAME_TABLE_BACKGROUND = require("@/assets/images/game-table-background.png");
+const TABLE_BACKGROUNDS = {
+  green: require("@/assets/images/game-table-background.png"),
+  blue: require("@/assets/images/game-table-blue.png"),
+  red: require("@/assets/images/game-table-red.png"),
+} as const;
 
 import { useGame } from "@/context/GameContext";
 import { useAuth } from "@/context/AuthContext";
@@ -143,7 +147,8 @@ export default function GameScreen() {
     isBotThinking,
   } = useGame();
   const { user } = useAuth();
-  const { avatarIndex, displayName: savedDisplayName } = useSettings();
+  const { avatarIndex, displayName: savedDisplayName, tableTheme } = useSettings();
+  const GAME_TABLE_BACKGROUND = TABLE_BACKGROUNDS[tableTheme] ?? TABLE_BACKGROUNDS.green;
 
   const insets = useSafeAreaInsets();
 

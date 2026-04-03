@@ -29,7 +29,11 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 
-const GAME_TABLE_BACKGROUND = require("@/assets/images/game-table-background.png");
+const TABLE_BACKGROUNDS = {
+  green: require("@/assets/images/game-table-background.png"),
+  blue: require("@/assets/images/game-table-blue.png"),
+  red: require("@/assets/images/game-table-red.png"),
+} as const;
 
 import { useOnlineGame } from "@/context/OnlineGameContext";
 import { useAuth } from "@/context/AuthContext";
@@ -175,7 +179,8 @@ function GameOnlineTable({
   const isOpponentBot = (opponentId: string) =>
     onlineRoster.find((r) => r.id === opponentId)?.isBot ?? false;
   const { user } = useAuth();
-  const { avatarIndex, displayName: savedDisplayName } = useSettings();
+  const { avatarIndex, displayName: savedDisplayName, tableTheme } = useSettings();
+  const GAME_TABLE_BACKGROUND = TABLE_BACKGROUNDS[tableTheme] ?? TABLE_BACKGROUNDS.green;
 
   const insets = useSafeAreaInsets();
 

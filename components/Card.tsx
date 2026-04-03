@@ -6,6 +6,7 @@ import {
   Pressable,
   Platform,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -113,6 +114,7 @@ interface CardBackProps {
 
 export function CardBack({ style, size = "medium", count }: CardBackProps) {
   const dims = SIZE_MAP[size];
+  const cardBackSource = require("@/assets/images/card-back.png");
   return (
     <View
       style={[
@@ -125,12 +127,13 @@ export function CardBack({ style, size = "medium", count }: CardBackProps) {
         style,
       ]}
     >
-      <View style={styles.cardBackInner}>
-        <View style={styles.cardBackPattern}>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <View key={i} style={styles.patternDiamond} />
-          ))}
-        </View>
+      <View style={[styles.cardBackClip, { borderRadius: dims.radius }]} pointerEvents="none">
+        <ExpoImage
+          source={cardBackSource}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          transition={0}
+        />
       </View>
       {count !== undefined && (
         <View style={styles.countBadge}>
@@ -196,7 +199,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   cardBack: {
-    backgroundColor: COLORS.red,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
@@ -204,31 +206,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.45,
     shadowRadius: 8,
     elevation: 12,
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.25)",
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    borderColor: "transparent",
   },
-  cardBackInner: {
-    flex: 1,
-    width: "100%",
-    borderRadius: 6,
+  cardBackClip: {
+    ...StyleSheet.absoluteFillObject,
     overflow: "hidden",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 4,
-  },
-  cardBackPattern: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 3,
-    opacity: 0.4,
-  },
-  patternDiamond: {
-    width: 8,
-    height: 8,
-    backgroundColor: "#FFD700",
-    transform: [{ rotate: "45deg" }],
-    margin: 2,
   },
   countBadge: {
     position: "absolute",

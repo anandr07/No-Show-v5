@@ -16,10 +16,21 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import COLORS from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
-import { useSettings } from "@/context/SettingsContext";
+import { useSettings, type TableTheme } from "@/context/SettingsContext";
 import { PlayerAvatarImage } from "@/components/PlayerAvatarImage";
 import { PLAYER_AVATAR_COUNT } from "@/constants/player-avatar";
 import { resolvePlayerDisplayName, sanitizeDisplayName } from "@/lib/player-display";
+import { Image as ExpoImage } from "expo-image";
+
+const GAME_TABLE_GREEN = require("@/assets/images/game-table-background.png");
+const GAME_TABLE_BLUE = require("@/assets/images/game-table-blue.png");
+const GAME_TABLE_RED = require("@/assets/images/game-table-red.png");
+
+const TABLE_OPTIONS: { theme: TableTheme; label: string; image: any }[] = [
+  { theme: "green", label: "Green", image: GAME_TABLE_GREEN },
+  { theme: "blue", label: "Blue", image: GAME_TABLE_BLUE },
+  { theme: "red", label: "Red", image: GAME_TABLE_RED },
+];
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -29,20 +40,24 @@ export default function ProfileScreen() {
   const {
     displayName: savedDisplayName,
     avatarIndex: savedAvatarIndex,
+    tableTheme: savedTableTheme,
     setDisplayName,
     setAvatarIndex,
+    setTableTheme,
     isLoading: settingsLoading,
   } = useSettings();
 
   const [nameDraft, setNameDraft] = useState("");
   const [pickedAvatar, setPickedAvatar] = useState(0);
+  const [tableDraft, setTableDraft] = useState<TableTheme>("green");
   const [savedHint, setSavedHint] = useState(false);
 
   useEffect(() => {
     if (settingsLoading) return;
     setNameDraft(savedDisplayName);
     setPickedAvatar(savedAvatarIndex);
-  }, [settingsLoading, savedDisplayName, savedAvatarIndex]);
+    setTableDraft(savedTableTheme);
+  }, [settingsLoading, savedDisplayName, savedAvatarIndex, savedTableTheme]);
 
   const resolvedPreview = resolvePlayerDisplayName({
     localName: nameDraft,
@@ -55,9 +70,10 @@ export default function ProfileScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     await setDisplayName(nameDraft);
     await setAvatarIndex(pickedAvatar);
+    await setTableTheme(tableDraft);
     setSavedHint(true);
     setTimeout(() => setSavedHint(false), 2000);
-  }, [nameDraft, pickedAvatar, setDisplayName, setAvatarIndex]);
+  }, [nameDraft, pickedAvatar, tableDraft, setDisplayName, setAvatarIndex, setTableTheme]);
 
   return (
     <View style={styles.container}>
@@ -158,6 +174,42 @@ export default function ProfileScreen() {
           />
           <Text style={styles.previewLabel}>Preview</Text>
           <Text style={styles.previewName}>{resolvedPreview}</Text>
+
+          <Text style={[styles.sectionLabel, { marginTop: 28 }]}>TABLE THEME</Text>
+          <Text style={styles.sectionHint}>Choose the casino table you want to play on.</Text>
+
+          <View style={styles.tablePickerRow}>
+            {TABLE_OPTIONS.map((opt) => {
+              const selected = tableDraft === opt.theme;
+              return (
+                <Pressable
+                  key={opt.theme}
+                  style={({ pressed }) => [
+                    styles.tableCell,
+                    selected && styles.tableCellSelected,
+                    pressed && styles.tableCellPressed,
+                  ]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setTableDraft(opt.theme);
+                  }}
+                >
+                  <ExpoImage
+                    source={opt.image}
+                    style={styles.tableCellImage}
+                    contentFit="cover"
+                    transition={0}
+                  />
+                  {selected ? (
+                    <View style={styles.tableCheck}>
+                      <Ionicons name="checkmark-circle" size={18} color={COLORS.gold} />
+                    </View>
+                  ) : null}
+                  <Text style={styles.tableCellLabel}>{opt.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
 
           {user?.email ? (
             <Text style={styles.accountEmail}>Account: {user.email}</Text>
@@ -311,5 +363,52 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
     marginTop: 12,
+  },
+  tablePickerRow: {
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+    marginTop: 12,
+  },
+  tableCell: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.25)",
+    padding: 0,
+    alignItems: "center",
+  },
+  tableCellPressed: {
+    opacity: 0.9,
+  },
+  tableCellSelected: {
+    borderColor: "rgba(255,215,0,0.7)",
+    backgroundColor: "rgba(255,215,0,0.08)",
+  },
+  tableCellImage: {
+    width: "100%",
+    height: 84,
+  },
+  tableCheck: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 14,
+    width: 28,
+    height: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,215,0,0.35)",
+  },
+  tableCellLabel: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 8,
+    marginBottom: 10,
   },
 });

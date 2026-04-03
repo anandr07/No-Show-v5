@@ -9,6 +9,7 @@ import Animated, {
   Easing,
   runOnJS,
 } from "react-native-reanimated";
+import { Image as ExpoImage } from "expo-image";
 import { Card as CardType, SUIT_SYMBOLS } from "@/lib/gameEngine";
 import COLORS from "@/constants/colors";
 
@@ -32,6 +33,7 @@ export function FlightCard({ id, card, faceDown, fromPos, toPos, delay, onDone }
   const progress = useSharedValue(0);
   const isRed = card && (card.suit === "hearts" || card.suit === "diamonds");
   const symbol = card ? (SUIT_SYMBOLS[card.suit] ?? "") : "";
+  const cardBackSource = require("@/assets/images/card-back.png");
 
   useEffect(() => {
     progress.value = withDelay(
@@ -73,7 +75,12 @@ export function FlightCard({ id, card, faceDown, fromPos, toPos, delay, onDone }
     >
       {faceDown || !card ? (
         <View style={styles.flightBack}>
-          <Text style={styles.flightBackSymbol}>♠</Text>
+          <ExpoImage
+            source={cardBackSource}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            transition={0}
+          />
         </View>
       ) : (
         <View
@@ -118,9 +125,6 @@ const styles = StyleSheet.create({
   flightBack: {
     flex: 1,
     borderRadius: 8,
-    backgroundColor: "#1B3A6B",
-    borderWidth: 2,
-    borderColor: "#2A5CA8",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
@@ -128,9 +132,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.75,
     shadowRadius: 14,
     elevation: 20,
-  },
-  flightBackSymbol: {
-    fontSize: 22,
-    color: "rgba(255,255,255,0.18)",
+    overflow: "hidden",
+    borderWidth: 0,
+    borderColor: "transparent",
   },
 });

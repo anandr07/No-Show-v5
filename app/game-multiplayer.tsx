@@ -48,7 +48,11 @@ import { GameQuickChatFab, GameQuickChatSheet } from "@/components/GameQuickChat
 import { QuickChatBubble } from "@/components/QuickChatBubble";
 import { getQuickChatText } from "@/constants/quickChatMessages";
 
-const GAME_TABLE_BACKGROUND = require("@/assets/images/game-table-background.png");
+const TABLE_BACKGROUNDS = {
+  green: require("@/assets/images/game-table-background.png"),
+  blue: require("@/assets/images/game-table-blue.png"),
+  red: require("@/assets/images/game-table-red.png"),
+} as const;
 
 interface OppZoneProps {
   player: { id: string; name: string; hand: CardType[]; status: string };
@@ -120,7 +124,8 @@ function OppZone({ player, isTurn, avatarColor, compact, isBot, botAvatarIndex =
 
 export default function GameMultiplayerScreen() {
   const { user } = useAuth();
-  const { avatarIndex, displayName: savedDisplayName } = useSettings();
+  const { avatarIndex, displayName: savedDisplayName, tableTheme } = useSettings();
+  const GAME_TABLE_BACKGROUND = TABLE_BACKGROUNDS[tableTheme] ?? TABLE_BACKGROUNDS.green;
   const {
     gameState: state,
     playerId,
