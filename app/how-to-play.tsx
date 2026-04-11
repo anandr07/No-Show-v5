@@ -13,6 +13,7 @@ import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import COLORS from "@/constants/colors";
+import { HOW_PLAY_FLOW } from "@/constants/flowThemes";
 
 const sections = [
   {
@@ -72,16 +73,22 @@ export default function HowToPlayScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={[COLORS.bgDeep, "#030A06", "#040D08"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        colors={[...HOW_PLAY_FLOW.bgGradient]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
+      <View style={styles.glowSpot} />
 
       <View style={[styles.header, { paddingTop: topInset + 8, paddingLeft: insets.left + 12 }]}>
         <Pressable style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color={COLORS.gold} />
+          <Ionicons name="arrow-back" size={22} color={HOW_PLAY_FLOW.accent} />
         </Pressable>
         <View style={styles.titleRow}>
-          <MaterialCommunityIcons name="cards-playing" size={20} color={COLORS.gold} />
+          <MaterialCommunityIcons name="cards-playing" size={20} color={HOW_PLAY_FLOW.accent} />
           <Text style={styles.headerTitle}>HOW TO PLAY</Text>
-          <MaterialCommunityIcons name="cards-playing" size={20} color={COLORS.gold} />
+          <MaterialCommunityIcons name="cards-playing" size={20} color={HOW_PLAY_FLOW.accent} />
         </View>
         <View style={{ width: 40 }} />
       </View>
@@ -123,6 +130,17 @@ export default function HowToPlayScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  glowSpot: {
+    position: "absolute",
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: HOW_PLAY_FLOW.accent,
+    opacity: 0.05,
+    top: "12%",
+    left: "50%",
+    transform: [{ translateX: -130 }],
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -134,11 +152,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255,215,0,0.1)",
+    backgroundColor: `rgba(${HOW_PLAY_FLOW.rgb},0.12)`,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.3)",
+    borderColor: `rgba(${HOW_PLAY_FLOW.rgb},0.35)`,
   },
   titleRow: {
     flexDirection: "row",
@@ -146,7 +164,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   headerTitle: {
-    color: COLORS.gold,
+    color: HOW_PLAY_FLOW.accent,
     fontSize: 18,
     fontWeight: "800",
     letterSpacing: 2,
@@ -192,15 +210,15 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   cardTable: {
-    backgroundColor: "rgba(255,215,0,0.08)",
+    backgroundColor: `rgba(${HOW_PLAY_FLOW.rgb},0.1)`,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.2)",
+    borderColor: `rgba(${HOW_PLAY_FLOW.rgb},0.22)`,
     gap: 12,
   },
   cardTableTitle: {
-    color: COLORS.gold,
+    color: HOW_PLAY_FLOW.accent,
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.5,

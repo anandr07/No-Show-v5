@@ -17,15 +17,21 @@ import COLORS from "@/constants/colors";
  * in game screens for the same pattern.
  */
 
-export function GameQuickChatFab({ onPress }: { onPress: () => void }) {
+export function GameQuickChatFab({
+  onPress,
+  accentColor = COLORS.gold,
+}: {
+  onPress: () => void;
+  accentColor?: string;
+}) {
   return (
     <Pressable
-      style={styles.fabInline}
+      style={[styles.fabInline, { borderColor: `${accentColor}55` }]}
       onPress={onPress}
       accessibilityLabel="Quick chat"
       hitSlop={6}
     >
-      <Ionicons name="chatbubble-ellipses" size={22} color={COLORS.gold} />
+      <Ionicons name="chatbubble-ellipses" size={22} color={accentColor} />
     </Pressable>
   );
 }
@@ -34,9 +40,15 @@ interface GameQuickChatSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPick: (messageId: number) => void;
+  accentColor?: string;
 }
 
-export function GameQuickChatSheet({ open, onOpenChange, onPick }: GameQuickChatSheetProps) {
+export function GameQuickChatSheet({
+  open,
+  onOpenChange,
+  onPick,
+  accentColor = COLORS.gold,
+}: GameQuickChatSheetProps) {
   const insets = useSafeAreaInsets();
   const { height: windowH } = useWindowDimensions();
 
@@ -65,11 +77,14 @@ export function GameQuickChatSheet({ open, onOpenChange, onPick }: GameQuickChat
         />
         <View style={[styles.sheet, { maxHeight: sheetMaxH }]} pointerEvents="box-none">
           <View
-            style={[styles.sheetInner, { paddingBottom: Math.max(insets.bottom, 8) + 8 }]}
+            style={[
+              styles.sheetInner,
+              { paddingBottom: Math.max(insets.bottom, 8) + 8, borderColor: `${accentColor}40` },
+            ]}
             pointerEvents="auto"
           >
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Quick chat</Text>
+              <Text style={[styles.sheetTitle, { color: accentColor }]}>Quick chat</Text>
               <Pressable onPress={() => onOpenChange(false)} hitSlop={12} accessibilityRole="button">
                 <Ionicons name="close" size={22} color={COLORS.textMuted} />
               </Pressable>
@@ -84,7 +99,10 @@ export function GameQuickChatSheet({ open, onOpenChange, onPick }: GameQuickChat
               {QUICK_CHAT_MESSAGES.map((label, messageId) => (
                 <Pressable
                   key={messageId}
-                  style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                  style={({ pressed }) => [
+                    styles.row,
+                    pressed && { backgroundColor: `${accentColor}22` },
+                  ]}
                   onPress={() => handlePick(messageId)}
                 >
                   <Text style={styles.rowText}>{label}</Text>
@@ -107,7 +125,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     backgroundColor: "rgba(0,0,0,0.65)",
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.35)",
     justifyContent: "center",
     alignItems: "center",
     alignSelf: "center",
@@ -143,7 +160,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.25)",
   },
   sheetHeader: {
     flexDirection: "row",
@@ -155,7 +171,6 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(255,255,255,0.08)",
   },
   sheetTitle: {
-    color: COLORS.gold,
     fontSize: 16,
     fontWeight: "800",
   },
@@ -171,9 +186,6 @@ const styles = StyleSheet.create({
     marginVertical: 2,
     borderRadius: 10,
     backgroundColor: "rgba(255,255,255,0.06)",
-  },
-  rowPressed: {
-    backgroundColor: "rgba(255,215,0,0.12)",
   },
   rowText: {
     color: COLORS.text,

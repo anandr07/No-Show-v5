@@ -12,6 +12,8 @@ import Animated, {
 import { Image as ExpoImage } from "expo-image";
 import { Card as CardType, SUIT_SYMBOLS } from "@/lib/gameEngine";
 import COLORS from "@/constants/colors";
+import { useSettings } from "@/context/SettingsContext";
+import { getCardBackImageSource } from "@/constants/storeCatalog";
 
 export const FLIGHT_W = 46;
 export const FLIGHT_H = 66;
@@ -31,9 +33,10 @@ interface FlightCardProps extends GameCardAnimItem {
 
 export function FlightCard({ id, card, faceDown, fromPos, toPos, delay, onDone }: FlightCardProps) {
   const progress = useSharedValue(0);
+  const { cardBackId } = useSettings();
+  const cardBackSource = getCardBackImageSource(cardBackId);
   const isRed = card && (card.suit === "hearts" || card.suit === "diamonds");
   const symbol = card ? (SUIT_SYMBOLS[card.suit] ?? "") : "";
-  const cardBackSource = require("@/assets/images/card-back.png");
 
   useEffect(() => {
     progress.value = withDelay(

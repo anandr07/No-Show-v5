@@ -41,6 +41,7 @@ function RootLayoutNav() {
       <Stack.Screen name="past-games" />
       <Stack.Screen name="statistics" />
       <Stack.Screen name="settings" />
+      <Stack.Screen name="store" />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

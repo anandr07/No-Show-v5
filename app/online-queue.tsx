@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import COLORS from "@/constants/colors";
+import { ONLINE_FLOW } from "@/constants/flowThemes";
 import { useOnlineGame } from "@/context/OnlineGameContext";
 import { useResponsive } from "@/lib/responsive";
 
@@ -42,7 +43,12 @@ export default function OnlineQueueScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#051810", "#0A2416", "#133D24"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        colors={[...ONLINE_FLOW.bgGradient]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
 
       <View style={[styles.header, { paddingTop: topInset + vScale(8, 6, 14), paddingHorizontal: scale(20, 14, 28) }]}>
         <Text style={[styles.title, { fontSize: mScale(18, 0.5, 16, 22) }]}>MATCHMAKING</Text>
@@ -88,7 +94,7 @@ export default function OnlineQueueScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {},
-  title: { color: COLORS.gold, fontWeight: "900", letterSpacing: 1.2 },
+  title: { color: ONLINE_FLOW.accent, fontWeight: "900", letterSpacing: 1.2 },
   content: {
     flex: 1,
     justifyContent: "center",
@@ -96,7 +102,7 @@ const styles = StyleSheet.create({
   },
   modeText: { color: COLORS.text, fontWeight: "800" },
   statusText: { color: COLORS.textDim, textAlign: "center" },
-  timerText: { color: COLORS.gold, fontWeight: "900" },
+  timerText: { color: ONLINE_FLOW.accent, fontWeight: "900" },
   progressTrack: {
     width: "84%",
     height: 10,
@@ -106,14 +112,14 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: "100%",
-    backgroundColor: COLORS.gold,
+    backgroundColor: ONLINE_FLOW.accent,
   },
   ruleText: { color: COLORS.textMuted, textAlign: "center" },
   botWarn: { color: "#ffcc66", fontWeight: "700" },
   error: { color: COLORS.error, textAlign: "center" },
   cancelBtn: {
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)",
+    borderColor: `rgba(${ONLINE_FLOW.rgb},0.4)`,
   },
   cancelText: { color: COLORS.text, fontWeight: "700" },
 });

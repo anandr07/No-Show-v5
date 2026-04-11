@@ -7,11 +7,13 @@ import {
   ScrollView,
   Platform,
   Alert,
+  Dimensions,
 } from "react-native";
 import Animated, {
   FadeIn,
   FadeOut,
   ZoomIn,
+  SlideInDown,
   useSharedValue,
   useAnimatedStyle,
   withRepeat,
@@ -41,6 +43,7 @@ import {
   SUIT_SYMBOLS,
 } from "@/lib/gameEngine";
 import COLORS, { AVATAR_COLORS } from "@/constants/colors";
+import { MULTIPLAYER_FLOW } from "@/constants/flowThemes";
 import { FlightCard } from "@/components/FlightCard";
 import { useGameCardFlightAnimations } from "@/hooks/useGameCardFlightAnimations";
 import { getSeatScreenPosForLocalPlayer } from "@/lib/game-card-flight-positions";
@@ -52,7 +55,10 @@ const TABLE_BACKGROUNDS = {
   green: require("@/assets/images/game-table-background.png"),
   blue: require("@/assets/images/game-table-blue.png"),
   red: require("@/assets/images/game-table-red.png"),
+  yellow: require("@/assets/images/game-table-yellow.png"),
 } as const;
+
+const { height: SCREEN_H } = Dimensions.get("window");
 
 interface OppZoneProps {
   player: { id: string; name: string; hand: CardType[]; status: string };
@@ -82,7 +88,7 @@ function OppZone({ player, isTurn, avatarColor, compact, isBot, botAvatarIndex =
   const glowStyle = useAnimatedStyle(() => ({
     shadowOpacity: interpolate(glow.value, [0, 1], [0, 0.9]),
     borderColor: isTurn
-      ? `rgba(255,215,0,${interpolate(glow.value, [0, 1], [0.3, 0.9])})`
+      ? `rgba(${MULTIPLAYER_FLOW.rgb},${interpolate(glow.value, [0, 1], [0.3, 0.9])})`
       : "rgba(255,255,255,0.15)",
   }));
 
@@ -224,7 +230,7 @@ export default function GameMultiplayerScreen() {
           <View style={styles.tableBgDim} pointerEvents="none" />
         </View>
         <Animated.View entering={ZoomIn} style={{ zIndex: 1 }}>
-          <MaterialCommunityIcons name="cards-playing" size={60} color={COLORS.gold} />
+          <MaterialCommunityIcons name="cards-playing" size={60} color={MULTIPLAYER_FLOW.accent} />
         </Animated.View>
         <Text style={[styles.dealingText, { zIndex: 1 }]}>Loading...</Text>
       </View>
@@ -530,7 +536,7 @@ export default function GameMultiplayerScreen() {
           </View>
 
           <View style={styles.handRow}>
-            <GameQuickChatFab onPress={() => setQuickChatOpen(true)} />
+            <GameQuickChatFab accentColor={MULTIPLAYER_FLOW.accent} onPress={() => setQuickChatOpen(true)} />
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -555,6 +561,7 @@ export default function GameMultiplayerScreen() {
                       onPress={() => handleCardPress(card)}
                       size="medium"
                       disabled={!isHumanTurn || state.turnPhase !== "throw"}
+                      selectionAccent={MULTIPLAYER_FLOW.accent}
                     />
                   </Animated.View>
                 );
@@ -606,7 +613,7 @@ export default function GameMultiplayerScreen() {
                   onPress={handleThrow}
                   disabled={selectedCards.length === 0}
                 >
-                  <Ionicons name="send" size={13} color="#000" />
+                  <Ionicons name="send" size={13} color="#fff" />
                   <Text style={styles.throwBtnText}>
                     {selectedCards.length > 0 ? `THROW (${selectedCards.length})` : "THROW"}
                   </Text>
@@ -621,6 +628,7 @@ export default function GameMultiplayerScreen() {
         open={quickChatOpen}
         onOpenChange={setQuickChatOpen}
         onPick={sendQuickChat}
+        accentColor={MULTIPLAYER_FLOW.accent}
       />
 
       <View style={[styles.topBar, { top: topInset + 4, left: leftInset + 8, right: rightInset + 8 }]}>
@@ -630,11 +638,11 @@ export default function GameMultiplayerScreen() {
         <View style={styles.topCenter} />
         <View style={styles.topBarRight}>
           <View style={styles.roundBadge} accessibilityLabel={`Round ${state.round}`}>
-            <MaterialCommunityIcons name="counter" size={15} color={COLORS.gold} />
+            <MaterialCommunityIcons name="counter" size={15} color={MULTIPLAYER_FLOW.accent} />
             <Text style={styles.roundBadgeText}>{state.round}</Text>
           </View>
           <Pressable style={styles.iconBtn} onPress={() => setShowScoreModal(true)}>
-            <Ionicons name="stats-chart" size={16} color={COLORS.gold} />
+            <Ionicons name="stats-chart" size={16} color={MULTIPLAYER_FLOW.accent} />
           </Pressable>
         </View>
       </View>
@@ -715,83 +723,129 @@ export default function GameMultiplayerScreen() {
         </View>
       )}
 
-      {/* Show reveal overlay - rectangular scorecard for landscape */}
+      {/* ── SHOW REVEAL SCORECARD (match VS + online) ── */}
       {showReveal && (
-        <View style={styles.showRevealOverlay} pointerEvents="box-none">
-          <View style={styles.modalBg}>
-            <View style={styles.showModal}>
-              <Text style={styles.showModalTitle}>✦ SHOW! ✦</Text>
-              {state.showCallerIndex !== null && state.players[state.showCallerIndex]?.id === playerId && (
-                <Text style={styles.showModalSubtitle}>You called Show</Text>
-              )}
-              {(state.roundScores ?? []).some((s) => s.delta === 15) && (
-                <View style={styles.showPenaltyBox}>
-                  <Ionicons name="alert-circle" size={16} color={COLORS.error} />
-                  <Text style={styles.showPenaltyText}>
-                    Shower penalty: lower score → shower +15 pts, others 0 pts
-                  </Text>
-                </View>
-              )}
-              <ScrollView showsVerticalScrollIndicator={false} style={styles.showScroll}>
-                {(state.roundScores ?? []).map((score) => {
-                  const p = state.players.find((pl) => pl.id === score.playerId);
-                  const hand = p?.hand ?? [];
-                  const isMe = p?.id === playerId;
-                  return (
-                    <View key={score.playerId} style={[styles.showRow, isMe && styles.showRowMe]}>
-                      <View style={styles.showRowLeft}>
-                        <View style={[styles.showAvatar, { backgroundColor: AVATAR_COLORS[state.players.findIndex((pl) => pl.id === score.playerId) % AVATAR_COLORS.length] }]}>
-                          <Text style={styles.showAvatarTxt}>{p?.name?.[0] ?? "?"}</Text>
-                        </View>
-                        <Text style={styles.showName}>{isMe ? "You" : p?.name ?? "—"}</Text>
-                      </View>
-                      <View style={styles.showCards}>
-                        {hand.slice(0, 5).map((c, i) => (
-                          <View key={c?.id ?? `card-${i}`} style={styles.showMiniCard}>
-                            <Text
-                              style={[
-                                styles.showMiniCardTxt,
-                                { color: c?.suit === "hearts" || c?.suit === "diamonds" ? COLORS.cardRed : "#1A1A1A" },
-                              ]}
-                            >
-                              {c?.rank ?? ""}
-                              {c?.suit ? (SUIT_SYMBOLS[c.suit] ?? "") : ""}
-                            </Text>
-                          </View>
-                        ))}
-                        {hand.length > 5 && (
-                          <Text style={styles.showMore}>+{hand.length - 5}</Text>
-                        )}
-                      </View>
-                      <View style={styles.showScores}>
-                        <Text style={styles.showHandScore}>{score.score} pts</Text>
-                        <Text style={[styles.showDeltaTxt, score.delta > 0 ? styles.deltaBad : styles.deltaGood]}>
-                          {score.delta === 15 ? "+15 penalty" : score.delta === 0 ? "+0" : `+${score.delta}`}
-                        </Text>
-                        <Text style={styles.showTotalTxt}>{p?.totalScore ?? score.delta} total</Text>
+        <Animated.View entering={FadeIn.duration(300)} style={styles.showRevealOverlayContainer}>
+          <LinearGradient
+            colors={["rgba(0,0,0,0.92)", "rgba(0,5,0,0.95)"]}
+            style={StyleSheet.absoluteFill}
+          />
+          <Animated.View entering={SlideInDown.springify().damping(18)} style={styles.showRevealModal}>
+            <LinearGradient
+              colors={["#0F3020", "#081A10", "#050F08"]}
+              style={StyleSheet.absoluteFill}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+            />
+            <View style={styles.showRevealModalBorderDecor} />
+
+            <View style={styles.showRevealModalHeader}>
+              <MaterialCommunityIcons name="cards-playing" size={22} color={MULTIPLAYER_FLOW.accent} />
+              <Text style={styles.showRevealModalTitle}>✦  SHOW!  ✦</Text>
+              <MaterialCommunityIcons name="cards-playing" size={22} color={MULTIPLAYER_FLOW.accent} />
+            </View>
+
+            {state.showCallerIndex !== null && state.players[state.showCallerIndex]?.id === playerId && (
+              <Text style={styles.showRevealModalCaller}>You called Show</Text>
+            )}
+            {state.showCallerIndex !== null && state.players[state.showCallerIndex]?.id !== playerId && (
+              <Text style={styles.showRevealModalCaller}>
+                {state.players[state.showCallerIndex]?.name} called Show
+              </Text>
+            )}
+
+            {(state.roundScores ?? []).some((s) => s.delta === 15) && (
+              <Animated.View entering={FadeIn.delay(300)} style={styles.showRevealPenaltyBox}>
+                <Ionicons name="alert-circle" size={14} color={COLORS.error} />
+                <Text style={styles.showRevealPenaltyText}>
+                  Shower had lowest score — +15 penalty
+                </Text>
+              </Animated.View>
+            )}
+
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.showRevealScroll}>
+              {(state.roundScores ?? []).map((score, si) => {
+                const p = state.players.find((pl) => pl.id === score.playerId);
+                const hand = p?.hand ?? [];
+                const isMe = p?.id === playerId;
+                const pIdx = state.players.findIndex((pl) => pl.id === score.playerId);
+                const avatarColor = AVATAR_COLORS[pIdx % AVATAR_COLORS.length];
+                return (
+                  <Animated.View
+                    key={score.playerId}
+                    entering={FadeIn.delay(200 + si * 100)}
+                    style={[styles.showRevealRow, isMe && styles.showRevealRowMe]}
+                  >
+                    <LinearGradient
+                      colors={isMe ? [`${avatarColor}20`, `${avatarColor}08`] : ["rgba(255,255,255,0.04)", "rgba(255,255,255,0.02)"]}
+                      style={StyleSheet.absoluteFill}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    />
+
+                    <View style={[styles.showRevealRowAvatar, { backgroundColor: avatarColor }]}>
+                      {isMe ? (
+                        <PlayerAvatarImage
+                          avatarIndex={avatarIndex}
+                          size={34}
+                          borderColor="rgba(255,255,255,0.2)"
+                          backgroundColor="rgba(0,0,0,0.35)"
+                        />
+                      ) : (
+                        <Text style={styles.showRevealRowAvatarTxt}>{p?.name?.[0] ?? "?"}</Text>
+                      )}
+                    </View>
+
+                    <View style={styles.showRevealRowLeft}>
+                      <Text style={styles.showRevealRowName}>{isMe ? "You" : p?.name ?? "—"}</Text>
+                      <View style={styles.showRevealMiniCards}>
+                        {hand.slice(0, 4).map((c, i) => {
+                          const isRed = c?.suit === "hearts" || c?.suit === "diamonds";
+                          return (
+                            <View key={c?.id ?? i} style={styles.showRevealMiniCard}>
+                              <Text style={[styles.showRevealMiniCardTxt, { color: isRed ? COLORS.cardRed : COLORS.cardBlack }]}>
+                                {c?.rank ?? ""}{c?.suit ? (SUIT_SYMBOLS[c.suit] ?? "") : ""}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                        {hand.length > 4 && <Text style={styles.showRevealMore}>+{hand.length - 4}</Text>}
                       </View>
                     </View>
-                  );
-                })}
-              </ScrollView>
-              <Pressable
-                style={styles.nextRoundBtn}
-                onPress={() => {
-                  setShowReveal(false);
-                  if ((state.phase as string) === "gameOver") {
-                    router.replace("/results");
-                  } else {
-                    nextRound();
-                  }
-                }}
-              >
-                <Text style={styles.nextRoundTxt}>
-                  {(state.phase as string) === "gameOver" ? "See Results →" : `Next Round ${state.round + 1} →`}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
+
+                    <View style={styles.showRevealRowRight}>
+                      <Text style={styles.showRevealHandScore}>{score.score} pts</Text>
+                      <Text
+                        style={[
+                          styles.showRevealDelta,
+                          score.delta === 15 ? styles.showRevealDeltaBad :
+                          score.delta === 0 ? styles.showRevealDeltaGood : styles.showRevealDeltaNeutral,
+                        ]}
+                      >
+                        {score.delta === 15 ? "+15 ⚠" : score.delta === 0 ? "+0 ✓" : `+${score.delta}`}
+                      </Text>
+                      <Text style={styles.showRevealTotal}>{p?.totalScore ?? score.delta} total</Text>
+                    </View>
+                  </Animated.View>
+                );
+              })}
+            </ScrollView>
+
+            <Pressable
+              style={styles.showRevealNextRoundBtn}
+              onPress={() => {
+                setShowReveal(false);
+                if ((state.phase as string) === "gameOver") router.replace("/results");
+                else nextRound();
+              }}
+            >
+              <LinearGradient colors={[COLORS.primary, COLORS.primaryDark]} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
+              <Text style={styles.showRevealNextRoundTxt}>
+                {(state.phase as string) === "gameOver" ? "See Final Results →" : `Next Round ${state.round + 1} →`}
+              </Text>
+            </Pressable>
+          </Animated.View>
+        </Animated.View>
       )}
     </View>
   );
@@ -805,7 +859,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 20,
   },
-  dealingText: { color: COLORS.gold, fontSize: 22, fontWeight: "700", letterSpacing: 2 },
+  dealingText: { color: MULTIPLAYER_FLOW.accent, fontSize: 22, fontWeight: "700", letterSpacing: 2 },
   tableBackground: {
     ...StyleSheet.absoluteFillObject,
     overflow: "hidden",
@@ -852,7 +906,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
-    shadowColor: COLORS.gold,
+    shadowColor: MULTIPLAYER_FLOW.accent,
     shadowOffset: { width: 0, height: 0 },
     shadowRadius: 10,
     elevation: 8,
@@ -886,7 +940,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: COLORS.gold,
+    backgroundColor: MULTIPLAYER_FLOW.accent,
     borderWidth: 2,
     borderColor: "#000",
   },
@@ -934,14 +988,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   pickHintBadge: {
-    backgroundColor: COLORS.gold,
+    backgroundColor: MULTIPLAYER_FLOW.accent,
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
     marginBottom: 2,
   },
   pickHintText: {
-    color: "#000",
+    color: "#fff",
     fontSize: 9,
     fontWeight: "800",
   },
@@ -1129,21 +1183,21 @@ const styles = StyleSheet.create({
   },
   showBtnText: { color: "#fff", fontSize: 12, fontWeight: "900", letterSpacing: 1.5 },
   throwBtn: {
-    backgroundColor: COLORS.gold,
+    backgroundColor: MULTIPLAYER_FLOW.accent,
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 8,
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    shadowColor: COLORS.gold,
+    shadowColor: MULTIPLAYER_FLOW.accent,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.45,
     shadowRadius: 6,
     elevation: 6,
   },
   throwBtnOff: { opacity: 0.35 },
-  throwBtnText: { color: "#000", fontSize: 12, fontWeight: "900", letterSpacing: 1 },
+  throwBtnText: { color: "#fff", fontSize: 12, fontWeight: "900", letterSpacing: 1 },
   errorPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -1191,17 +1245,11 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.1)",
   },
   roundBadgeText: {
-    color: COLORS.gold,
+    color: MULTIPLAYER_FLOW.accent,
     fontSize: 12,
     fontWeight: "800",
     minWidth: 14,
     textAlign: "center",
-  },
-  modalBg: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.82)",
-    justifyContent: "center",
-    alignItems: "center",
   },
   scoreOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -1217,13 +1265,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 9999,
   },
-  showRevealOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.82)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 9999,
-  },
   confirmShowModal: {
     backgroundColor: "#0E2D1A",
     borderRadius: 18,
@@ -1231,10 +1272,10 @@ const styles = StyleSheet.create({
     width: "80%",
     maxWidth: 340,
     borderWidth: 2,
-    borderColor: COLORS.gold,
+    borderColor: MULTIPLAYER_FLOW.accent,
     gap: 16,
   },
-  confirmShowTitle: { color: COLORS.gold, fontSize: 20, fontWeight: "900", textAlign: "center" },
+  confirmShowTitle: { color: MULTIPLAYER_FLOW.accent, fontSize: 20, fontWeight: "900", textAlign: "center" },
   confirmShowMessage: { color: COLORS.text, fontSize: 15, textAlign: "center", lineHeight: 22 },
   confirmShowBtns: { flexDirection: "row", gap: 12, marginTop: 8 },
   confirmShowCancel: {
@@ -1247,12 +1288,12 @@ const styles = StyleSheet.create({
   confirmShowCancelTxt: { color: COLORS.textMuted, fontSize: 15, fontWeight: "700" },
   confirmShowOk: {
     flex: 1,
-    backgroundColor: COLORS.gold,
+    backgroundColor: MULTIPLAYER_FLOW.accent,
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: "center",
   },
-  confirmShowOkTxt: { color: "#000", fontSize: 15, fontWeight: "900" },
+  confirmShowOkTxt: { color: "#fff", fontSize: 15, fontWeight: "900" },
   scoreModal: {
     backgroundColor: "#0E2D1A",
     borderRadius: 18,
@@ -1263,7 +1304,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     gap: 10,
   },
-  modalTitle: { color: COLORS.gold, fontSize: 16, fontWeight: "800", textAlign: "center", letterSpacing: 1, marginBottom: 4 },
+  modalTitle: { color: MULTIPLAYER_FLOW.accent, fontSize: 16, fontWeight: "800", textAlign: "center", letterSpacing: 1, marginBottom: 4 },
   scoreRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1273,20 +1314,24 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     backgroundColor: "rgba(255,255,255,0.05)",
   },
-  scoreRowMe: { backgroundColor: "rgba(255,215,0,0.1)", borderWidth: 1, borderColor: "rgba(255,215,0,0.3)" },
+  scoreRowMe: {
+    backgroundColor: `rgba(${MULTIPLAYER_FLOW.rgb},0.1)`,
+    borderWidth: 1,
+    borderColor: `rgba(${MULTIPLAYER_FLOW.rgb},0.3)`,
+  },
   scoreLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
   scoreAvatar: { width: 26, height: 26, borderRadius: 13, justifyContent: "center", alignItems: "center" },
   scoreAvatarTxt: { color: "#fff", fontSize: 11, fontWeight: "700" },
   scoreNameTxt: { color: COLORS.text, fontSize: 13, fontWeight: "600" },
   youTag: {
-    backgroundColor: "rgba(255,215,0,0.2)",
+    backgroundColor: `rgba(${MULTIPLAYER_FLOW.rgb},0.2)`,
     borderRadius: 5,
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.4)",
+    borderColor: `rgba(${MULTIPLAYER_FLOW.rgb},0.4)`,
   },
-  youTagTxt: { color: COLORS.gold, fontSize: 8, fontWeight: "800" },
+  youTagTxt: { color: MULTIPLAYER_FLOW.accent, fontSize: 8, fontWeight: "800" },
   outTag: { backgroundColor: COLORS.eliminated, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1 },
   outTagTxt: { color: "#fff", fontSize: 8, fontWeight: "800" },
   leftTag: { backgroundColor: "rgba(255,100,100,0.4)", borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1 },
@@ -1295,64 +1340,157 @@ const styles = StyleSheet.create({
   scorePtsDanger: { color: COLORS.error },
   closeBtn: { backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 10, paddingVertical: 9, alignItems: "center", marginTop: 4 },
   closeBtnTxt: { color: COLORS.textMuted, fontSize: 13, fontWeight: "600" },
-  showModal: {
-    backgroundColor: "#0E2D1A",
-    borderRadius: 16,
-    padding: 16,
+
+  // Show reveal scorecard (aligned with VS + online)
+  showRevealOverlayContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 9999,
+    backgroundColor: "rgba(0,0,0,0.85)",
+  },
+  showRevealModal: {
     width: "90%",
-    maxWidth: 460,
-    borderWidth: 2,
-    borderColor: COLORS.gold,
+    maxWidth: 520,
+    maxHeight: SCREEN_H * 0.82,
+    borderRadius: 22,
+    padding: 20,
+    overflow: "hidden",
     gap: 10,
-    maxHeight: "85%",
-  },
-  showModalTitle: { color: COLORS.gold, fontSize: 22, fontWeight: "900", textAlign: "center", letterSpacing: 2 },
-  showModalSubtitle: { color: COLORS.textMuted, fontSize: 12, textAlign: "center", marginTop: -2 },
-  showPenaltyBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    backgroundColor: "rgba(244,67,54,0.15)",
     borderWidth: 1,
-    borderColor: COLORS.error,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderColor: COLORS.border,
+    shadowColor: MULTIPLAYER_FLOW.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 24,
   },
-  showPenaltyText: { color: COLORS.text, fontSize: 11, fontWeight: "600", flex: 1, flexShrink: 1 },
-  showScroll: { maxHeight: 180, marginVertical: 2 },
-  showRow: {
+  showRevealModalBorderDecor: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2.5,
+    backgroundColor: MULTIPLAYER_FLOW.accent,
+    opacity: 0.6,
+  },
+  showRevealModalHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: 10,
-    marginBottom: 6,
+    justifyContent: "center",
+    gap: 10,
   },
-  showRowMe: { backgroundColor: "rgba(255,215,0,0.12)", borderWidth: 1, borderColor: "rgba(255,215,0,0.4)" },
-  showRowLeft: { flexDirection: "row", alignItems: "center", gap: 8, minWidth: 70 },
-  showAvatar: { width: 28, height: 28, borderRadius: 14, justifyContent: "center", alignItems: "center" },
-  showAvatarTxt: { color: "#fff", fontSize: 12, fontWeight: "800" },
-  showName: { color: COLORS.text, fontSize: 13, fontWeight: "700" },
-  showCards: { flexDirection: "row", flex: 1, gap: 3, flexWrap: "wrap", alignItems: "center", minWidth: 0 },
-  showMiniCard: {
+  showRevealModalTitle: {
+    color: MULTIPLAYER_FLOW.accent,
+    fontSize: 20,
+    fontWeight: "900",
+    letterSpacing: 3,
+    textShadowColor: MULTIPLAYER_FLOW.accent,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
+  },
+  showRevealModalCaller: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    letterSpacing: 0.5,
+  },
+  showRevealPenaltyBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(229,57,53,0.12)",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "rgba(229,57,53,0.25)",
+  },
+  showRevealPenaltyText: {
+    color: COLORS.error,
+    fontSize: 11,
+    fontWeight: "600",
+    flex: 1,
+  },
+  showRevealScroll: { maxHeight: SCREEN_H * 0.44 },
+  showRevealRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 6,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  showRevealRowMe: {
+    borderColor: `rgba(${MULTIPLAYER_FLOW.rgb},0.3)`,
+  },
+  showRevealRowAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.2)",
+    overflow: "hidden",
+  },
+  showRevealRowAvatarTxt: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  showRevealRowLeft: { flex: 1, gap: 4 },
+  showRevealRowName: { color: COLORS.text, fontSize: 13, fontWeight: "700" },
+  showRevealMiniCards: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    flexWrap: "wrap",
+  },
+  showRevealMiniCard: {
     backgroundColor: COLORS.cardWhite,
     borderRadius: 4,
     paddingHorizontal: 4,
     paddingVertical: 2,
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.15)",
+    borderColor: "rgba(0,0,0,0.12)",
   },
-  showMiniCardTxt: { fontSize: 10, fontWeight: "700" },
-  showMore: { color: COLORS.textMuted, fontSize: 10, alignSelf: "center" },
-  showScores: { alignItems: "flex-end", minWidth: 68 },
-  showHandScore: { color: COLORS.gold, fontSize: 12, fontWeight: "700" },
-  showDeltaTxt: { fontSize: 11, fontWeight: "800", marginTop: 1 },
-  showTotalTxt: { color: COLORS.textMuted, fontSize: 10, fontWeight: "600", marginTop: 1 },
-  deltaBad: { color: COLORS.error },
-  deltaGood: { color: COLORS.primary },
-  nextRoundBtn: { backgroundColor: COLORS.gold, borderRadius: 10, paddingVertical: 10, alignItems: "center", marginTop: 4 },
-  nextRoundTxt: { color: "#000", fontSize: 14, fontWeight: "900", letterSpacing: 1 },
+  showRevealMiniCardTxt: { fontSize: 10, fontWeight: "700" },
+  showRevealMore: {
+    color: COLORS.textDim,
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  showRevealRowRight: { alignItems: "flex-end", gap: 3 },
+  showRevealHandScore: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  showRevealDelta: { fontSize: 11, fontWeight: "700" },
+  showRevealDeltaBad: { color: COLORS.error },
+  showRevealDeltaGood: { color: COLORS.primary },
+  showRevealDeltaNeutral: { color: COLORS.textMuted },
+  showRevealTotal: {
+    color: COLORS.textDim,
+    fontSize: 10,
+    fontWeight: "500",
+  },
+  showRevealNextRoundBtn: {
+    borderRadius: 14,
+    overflow: "hidden",
+    paddingVertical: 14,
+    alignItems: "center",
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  showRevealNextRoundTxt: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
 });

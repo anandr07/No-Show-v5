@@ -16,6 +16,8 @@ import Animated, {
 } from "react-native-reanimated";
 import { Card as CardType, SUIT_SYMBOLS, SUIT_COLORS } from "@/lib/gameEngine";
 import COLORS from "@/constants/colors";
+import { useSettings } from "@/context/SettingsContext";
+import { getCardBackImageSource } from "@/constants/storeCatalog";
 
 interface CardProps {
   card: CardType;
@@ -24,6 +26,8 @@ interface CardProps {
   size?: "small" | "medium" | "large";
   disabled?: boolean;
   style?: object;
+  /** Border and glow when selected (defaults to gold). */
+  selectionAccent?: string;
 }
 
 export function Card({
@@ -33,7 +37,9 @@ export function Card({
   size = "medium",
   disabled = false,
   style,
+  selectionAccent,
 }: CardProps) {
+  const selAccent = selectionAccent ?? COLORS.gold;
   const scale = useSharedValue(1);
   const lift = useSharedValue(0);
 
@@ -72,9 +78,9 @@ export function Card({
             height: dims.height,
             borderRadius: dims.radius,
             borderWidth: selected ? 2.5 : 1.5,
-            borderColor: selected ? COLORS.gold : "rgba(0,0,0,0.15)",
+            borderColor: selected ? selAccent : "rgba(0,0,0,0.15)",
           },
-          selected && styles.selectedCard,
+          selected && [styles.selectedCard, { shadowColor: selAccent }],
           Platform.OS === "web" && pressed && { opacity: 0.9 },
         ]}
       >
@@ -100,7 +106,14 @@ export function Card({
           </Text>
         </View>
 
-        {selected && <View style={styles.selectedOverlay} />}
+        {selected ? (
+          <View
+            style={[
+              styles.selectedOverlay,
+              selectionAccent ? { backgroundColor: `${selectionAccent}22` } : null,
+            ]}
+          />
+        ) : null}
       </Pressable>
     </Animated.View>
   );
@@ -114,7 +127,8 @@ interface CardBackProps {
 
 export function CardBack({ style, size = "medium", count }: CardBackProps) {
   const dims = SIZE_MAP[size];
-  const cardBackSource = require("@/assets/images/card-back.png");
+  const { cardBackId } = useSettings();
+  const cardBackSource = getCardBackImageSource(cardBackId);
   return (
     <View
       style={[
@@ -165,7 +179,6 @@ const styles = StyleSheet.create({
   },
   selectedCard: {
     backgroundColor: "#FFFDE7",
-    shadowColor: COLORS.gold,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.7,
     shadowRadius: 12,

@@ -8,6 +8,7 @@ import {
   Platform,
   Alert,
   Dimensions,
+  ActivityIndicator,
 } from "react-native";
 import Animated, {
   useSharedValue,
@@ -33,6 +34,7 @@ const TABLE_BACKGROUNDS = {
   green: require("@/assets/images/game-table-background.png"),
   blue: require("@/assets/images/game-table-blue.png"),
   red: require("@/assets/images/game-table-red.png"),
+  yellow: require("@/assets/images/game-table-yellow.png"),
 } as const;
 
 import { useGame } from "@/context/GameContext";
@@ -222,6 +224,19 @@ export default function GameScreen() {
     prevTurnRef.current = state.currentPlayerIndex;
   }, [state.phase, state.currentPlayerIndex, humanIndex]);
 
+  /** Never navigate during render — that updates NavigationContainer and triggers React errors. */
+  useEffect(() => {
+    if (state.phase !== "gameOver") return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      if (!cancelled) router.replace("/results");
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [state.phase]);
+
   if (state.phase === "idle" || state.phase === "dealing" || state.players.length === 0) {
     return (
       <View style={styles.loadingContainer}>
@@ -237,8 +252,15 @@ export default function GameScreen() {
   }
 
   if (state.phase === "gameOver") {
-    router.replace("/results");
-    return null;
+    return (
+      <View style={styles.loadingContainer}>
+        <LinearGradient colors={[COLORS.bgDeep, COLORS.tableDark]} style={StyleSheet.absoluteFill} />
+        <ActivityIndicator size="large" color={COLORS.gold} />
+        <Animated.Text entering={FadeIn.delay(120)} style={styles.dealingText}>
+          Final scores…
+        </Animated.Text>
+      </View>
+    );
   }
 
   const humanPlayer = state.players.find((p) => p.type === "human");

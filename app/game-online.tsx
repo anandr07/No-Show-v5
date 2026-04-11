@@ -33,6 +33,7 @@ const TABLE_BACKGROUNDS = {
   green: require("@/assets/images/game-table-background.png"),
   blue: require("@/assets/images/game-table-blue.png"),
   red: require("@/assets/images/game-table-red.png"),
+  yellow: require("@/assets/images/game-table-yellow.png"),
 } as const;
 
 import { useOnlineGame } from "@/context/OnlineGameContext";
@@ -52,6 +53,7 @@ import {
 } from "@/lib/gameEngine";
 import type { GameState } from "@/lib/gameEngine";
 import COLORS, { AVATAR_COLORS } from "@/constants/colors";
+import { ONLINE_FLOW } from "@/constants/flowThemes";
 import { FlightCard } from "@/components/FlightCard";
 import { useGameCardFlightAnimations } from "@/hooks/useGameCardFlightAnimations";
 import { getSeatScreenPosForLocalPlayer } from "@/lib/game-card-flight-positions";
@@ -91,7 +93,7 @@ function OppZone({ player, isTurn, avatarColor, compact, isBot, botAvatarIndex =
   const glowStyle = useAnimatedStyle(() => ({
     shadowOpacity: interpolate(glow.value, [0, 1], [0, 0.9]),
     borderColor: isTurn
-      ? `rgba(255,215,0,${interpolate(glow.value, [0, 1], [0.3, 0.9])})`
+      ? `rgba(${ONLINE_FLOW.rgb},${interpolate(glow.value, [0, 1], [0.3, 0.9])})`
       : "rgba(255,255,255,0.15)",
   }));
 
@@ -160,17 +162,17 @@ interface GameOnlineTableProps {
 
 function GameOnlineTable({
   state,
-  playerId,
+    playerId,
   onlineRoster,
-  selectCard,
-  deselectCard,
-  throwSelectedCards,
-  pickFromDeck,
-  pickFromThrown,
-  callShow,
-  nextRound,
+    selectCard,
+    deselectCard,
+    throwSelectedCards,
+    pickFromDeck,
+    pickFromThrown,
+    callShow,
+    nextRound,
   resetOnline,
-  selectedCards,
+    selectedCards,
   contextError,
   clearError,
   quickChatEvents,
@@ -257,7 +259,7 @@ function GameOnlineTable({
         <LinearGradient colors={[COLORS.bgDeep, COLORS.tableDark]} style={StyleSheet.absoluteFill} />
         <Animated.View entering={ZoomIn}>
           <View style={styles.loadingIcon}>
-            <MaterialCommunityIcons name="cards-playing" size={52} color={COLORS.gold} />
+            <MaterialCommunityIcons name="cards-playing" size={52} color={ONLINE_FLOW.accent} />
           </View>
         </Animated.View>
         <Animated.Text entering={FadeIn.delay(200)} style={styles.dealingText}>Dealing Cards…</Animated.Text>
@@ -377,56 +379,56 @@ function GameOnlineTable({
     <View style={styles.centerPiles}>
       <View style={styles.pilesRow}>
         {/* Deck */}
-        <Pressable
-          onPress={showPickOptions && isHumanTurn ? handlePickFromDeck : undefined}
+                  <Pressable
+                    onPress={showPickOptions && isHumanTurn ? handlePickFromDeck : undefined}
           style={styles.pileWrap}
-        >
-          {showPickOptions && isHumanTurn && (
+                  >
+                    {showPickOptions && isHumanTurn && (
             <Animated.View style={[styles.pickHintBadge, pulseStyle]}>
               <Text style={styles.pickHintText}>Tap to Pick</Text>
-            </Animated.View>
-          )}
+                      </Animated.View>
+                    )}
           <Animated.View style={showPickOptions && isHumanTurn ? pulseStyle : undefined}>
-            <CardBack size="medium" />
+                    <CardBack size="medium" />
           </Animated.View>
-          <Text style={styles.pileLabel}>DECK</Text>
-        </Pressable>
+                    <Text style={styles.pileLabel}>DECK</Text>
+                  </Pressable>
 
         <View style={styles.pileArrow}>
           <Text style={styles.pileArrowText}>⇄</Text>
-        </View>
+                  </View>
 
         {/* Thrown pile */}
-        <View style={styles.pileWrap}>
+                  <View style={styles.pileWrap}>
           {showPickOptions && isHumanTurn && canPickFromThrown && (
             <Animated.View style={[styles.pickHintBadge, pulseStyle]}>
               <Text style={styles.pickHintText}>Tap to Pick</Text>
-            </Animated.View>
-          )}
-          <View style={styles.thrownBox}>
-            {state.lastThrown.length === 0 ? (
+                      </Animated.View>
+                    )}
+                    <View style={styles.thrownBox}>
+                      {state.lastThrown.length === 0 ? (
               <View style={styles.emptyPile}>
                 <Text style={styles.emptyPileText}>Empty</Text>
-              </View>
-            ) : (
+                        </View>
+                      ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.thrownScroll}>
-                {state.lastThrown.map((card, ci) => (
-                  <Card
-                    key={card.id}
-                    card={card}
-                    size="medium"
+                          {state.lastThrown.map((card, ci) => (
+                            <Card
+                              key={card.id}
+                              card={card}
+                              size="medium"
                     style={{ marginLeft: ci > 0 ? -20 : 0 }}
-                    onPress={canPickFromThrown ? () => handlePickFromThrown(card) : undefined}
-                    disabled={!canPickFromThrown}
-                  />
-                ))}
-              </ScrollView>
-            )}
-          </View>
+                              onPress={canPickFromThrown ? () => handlePickFromThrown(card) : undefined}
+                              disabled={!canPickFromThrown}
+                            />
+                          ))}
+                        </ScrollView>
+                      )}
+                    </View>
           <Text style={styles.pileLabel}>THROWN</Text>
-        </View>
-      </View>
+                  </View>
+                </View>
 
       {/* Turn indicator */}
       {!isHumanTurn && currentPlayer && (
@@ -443,10 +445,10 @@ function GameOnlineTable({
           </Text>
         </Animated.View>
       )}
-    </View>
+                      </View>
   );
 
-  return (
+    return (
     <View style={styles.root}>
       {/* ── TABLE BACKGROUND (full-screen art) ── */}
       <View style={styles.tableBackground}>
@@ -457,7 +459,7 @@ function GameOnlineTable({
           transition={0}
         />
         <View style={styles.tableBgDim} pointerEvents="none" />
-      </View>
+                  </View>
 
       {/* ── GAME CONTENT ── */}
       <View style={[styles.gameContent, {
@@ -474,7 +476,7 @@ function GameOnlineTable({
               avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]} isBot={isOpponentBot(opp1.id)}
               botAvatarIndex={botAvatarIndexForPlayer(opponents, opp1.id, isOpponentBot) ?? 0}
               quickChatText={quickChatByPlayer.get(opp1.id) ?? null} />
-          </View>
+                </View>
         )}
 
         {/* 2 opponents: row */}
@@ -488,7 +490,7 @@ function GameOnlineTable({
               avatarColor={AVATAR_COLORS[opp2Idx % AVATAR_COLORS.length]} isBot={isOpponentBot(opp2.id)}
               botAvatarIndex={botAvatarIndexForPlayer(opponents, opp2.id, isOpponentBot) ?? 0}
               quickChatText={quickChatByPlayer.get(opp2.id) ?? null} />}
-          </View>
+              </View>
         )}
 
         {/* 3 opponents: north + sides */}
@@ -498,7 +500,7 @@ function GameOnlineTable({
               avatarColor={AVATAR_COLORS[opp1Idx % AVATAR_COLORS.length]} isBot={isOpponentBot(opp1.id)}
               botAvatarIndex={botAvatarIndexForPlayer(opponents, opp1.id, isOpponentBot) ?? 0}
               quickChatText={quickChatByPlayer.get(opp1.id) ?? null} />
-          </View>
+                    </View>
         )}
 
         {/* Center: sides + table */}
@@ -509,7 +511,7 @@ function GameOnlineTable({
                 avatarColor={AVATAR_COLORS[opp2Idx % AVATAR_COLORS.length]} compact isBot={isOpponentBot(opp2.id)}
                 botAvatarIndex={botAvatarIndexForPlayer(opponents, opp2.id, isOpponentBot) ?? 0}
                 quickChatText={quickChatByPlayer.get(opp2.id) ?? null} />
-            </View>
+                </View>
           )}
 
           <CenterPiles />
@@ -540,14 +542,14 @@ function GameOnlineTable({
             {throwError || contextError ? (
               <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.errorPill}>
                 <Ionicons name="alert-circle" size={12} color="#fff" />
-                <Text style={styles.errorText}>{contextError || throwError}</Text>
-                {contextError ? (
-                  <Pressable onPress={clearError} hitSlop={8} style={{ padding: 4 }}>
-                    <Ionicons name="close-circle" size={16} color="#fff" />
-                  </Pressable>
-                ) : null}
-              </Animated.View>
-            ) : null}
+              <Text style={styles.errorText}>{contextError || throwError}</Text>
+              {contextError ? (
+                <Pressable onPress={clearError} hitSlop={8} style={{ padding: 4 }}>
+                  <Ionicons name="close-circle" size={16} color="#fff" />
+                </Pressable>
+              ) : null}
+            </Animated.View>
+          ) : null}
           </View>
 
           <View style={styles.handRow}>
@@ -575,18 +577,19 @@ function GameOnlineTable({
                         onPress={() => handleCardPress(card)}
                         size="medium"
                         disabled={!isHumanTurn || state.turnPhase !== "throw"}
+                        selectionAccent={ONLINE_FLOW.accent}
                       />
                     </Animated.View>
                   );
                 })}
-            </ScrollView>
+              </ScrollView>
 
             <View style={styles.meAside} pointerEvents="box-none">
               <View style={styles.meAsideInner}>
                 {humanPlayer && quickChatByPlayer.get(humanPlayer.id) ? (
                   <View style={styles.meChatAbove}>
                     <QuickChatBubble text={quickChatByPlayer.get(humanPlayer.id)!} />
-                  </View>
+            </View>
                 ) : null}
                 <View style={styles.meAsideRow}>
                   <View style={styles.meAvatar}>
@@ -607,32 +610,32 @@ function GameOnlineTable({
 
             {/* Action buttons — absolute right so hand can span full width and stay visually centered */}
             <View style={styles.actionCol}>
-              {(state.canCallShow ?? false) && isHumanTurn && state.turnPhase === "throw" && (
-                <Animated.View entering={ZoomIn}>
-                  <Pressable style={styles.showBtn} onPress={handleShow}>
+            {(state.canCallShow ?? false) && isHumanTurn && state.turnPhase === "throw" && (
+              <Animated.View entering={ZoomIn}>
+                <Pressable style={styles.showBtn} onPress={handleShow}>
                     <LinearGradient
                       colors={[COLORS.accent, "#C0392B"]}
                       style={StyleSheet.absoluteFill}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                     />
-                    <Text style={styles.showBtnText}>SHOW</Text>
-                  </Pressable>
-                </Animated.View>
-              )}
-
-              {isHumanTurn && state.turnPhase === "throw" && (
-                <Pressable
-                  style={[styles.throwBtn, selectedCards.length === 0 && styles.throwBtnOff]}
-                  onPress={handleThrow}
-                  disabled={selectedCards.length === 0}
-                >
-                  <Ionicons name="send" size={13} color="#000" />
-                  <Text style={styles.throwBtnText}>
-                    {selectedCards.length > 0 ? `THROW (${selectedCards.length})` : "THROW"}
-                  </Text>
+                  <Text style={styles.showBtnText}>SHOW</Text>
                 </Pressable>
-              )}
+              </Animated.View>
+            )}
+
+            {isHumanTurn && state.turnPhase === "throw" && (
+              <Pressable
+                style={[styles.throwBtn, selectedCards.length === 0 && styles.throwBtnOff]}
+                onPress={handleThrow}
+                disabled={selectedCards.length === 0}
+              >
+                  <Ionicons name="send" size={13} color="#fff" />
+                <Text style={styles.throwBtnText}>
+                    {selectedCards.length > 0 ? `THROW (${selectedCards.length})` : "THROW"}
+                </Text>
+              </Pressable>
+            )}
             </View>
           </View>
         </View>
@@ -642,6 +645,7 @@ function GameOnlineTable({
         open={quickChatOpen}
         onOpenChange={setQuickChatOpen}
         onPick={sendQuickChat}
+        accentColor={ONLINE_FLOW.accent}
       />
 
       {/* ── TOP BAR OVERLAY ── */}
@@ -654,11 +658,11 @@ function GameOnlineTable({
 
         <View style={styles.topBarRight}>
           <View style={styles.roundBadge} accessibilityLabel={`Round ${state.round}`}>
-            <MaterialCommunityIcons name="counter" size={15} color={COLORS.gold} />
+            <MaterialCommunityIcons name="counter" size={15} color={ONLINE_FLOW.accent} />
             <Text style={styles.roundBadgeText}>{state.round}</Text>
           </View>
           <Pressable style={styles.iconBtn} onPress={() => setShowScoreModal(true)}>
-            <Ionicons name="stats-chart" size={16} color={COLORS.gold} />
+            <Ionicons name="stats-chart" size={16} color={ONLINE_FLOW.accent} />
           </Pressable>
         </View>
       </View>
@@ -680,9 +684,9 @@ function GameOnlineTable({
             <View style={styles.scoreModalBorder} />
 
             <View style={styles.scoreModalHeader}>
-              <MaterialCommunityIcons name="trophy" size={18} color={COLORS.gold} />
+              <MaterialCommunityIcons name="trophy" size={18} color={ONLINE_FLOW.accent} />
               <Text style={styles.scoreModalTitle}>Scoreboard — Round {state.round}</Text>
-            </View>
+                  </View>
 
             <View style={styles.scoreRowsContainer}>
               {state.players.map((p, idx) => {
@@ -729,10 +733,10 @@ function GameOnlineTable({
                     <Text style={[styles.scorePts, danger && styles.scorePtsDanger]}>
                       {p.totalScore}
                     </Text>
-                  </View>
+                </View>
                 );
               })}
-            </View>
+              </View>
 
             <Pressable style={styles.closeBtn} onPress={() => setShowScoreModal(false)}>
               <Text style={styles.closeBtnTxt}>Close</Text>
@@ -749,7 +753,7 @@ function GameOnlineTable({
             <LinearGradient colors={["#0E2D1A", "#061508"]} style={StyleSheet.absoluteFill} />
             <View style={styles.confirmModalBorder} />
             <View style={styles.confirmIconWrap}>
-              <MaterialCommunityIcons name="cards-playing" size={32} color={COLORS.gold} />
+              <MaterialCommunityIcons name="cards-playing" size={32} color={ONLINE_FLOW.accent} />
             </View>
             <Text style={styles.confirmTitle}>Call Show?</Text>
             <Text style={styles.confirmMsg}>Reveal all hands and score the round.</Text>
@@ -758,7 +762,12 @@ function GameOnlineTable({
                 <Text style={styles.confirmCancelTxt}>Cancel</Text>
               </Pressable>
               <Pressable style={styles.confirmOk} onPress={handleConfirmShow}>
-                <LinearGradient colors={[COLORS.gold, COLORS.goldDark]} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+                <LinearGradient
+                  colors={[ONLINE_FLOW.accent, ONLINE_FLOW.accentDark]}
+                  style={StyleSheet.absoluteFill}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                />
                 <Text style={styles.confirmOkTxt}>Show!</Text>
               </Pressable>
             </View>
@@ -784,9 +793,9 @@ function GameOnlineTable({
 
             {/* Header */}
             <View style={styles.showModalHeader}>
-              <MaterialCommunityIcons name="cards-playing" size={22} color={COLORS.gold} />
+              <MaterialCommunityIcons name="cards-playing" size={22} color={ONLINE_FLOW.accent} />
               <Text style={styles.showModalTitle}>✦  SHOW!  ✦</Text>
-              <MaterialCommunityIcons name="cards-playing" size={22} color={COLORS.gold} />
+              <MaterialCommunityIcons name="cards-playing" size={22} color={ONLINE_FLOW.accent} />
             </View>
 
             {state.showCallerIndex !== null && state.players[state.showCallerIndex]?.id === humanPlayer?.id && (
@@ -796,19 +805,19 @@ function GameOnlineTable({
               <Text style={styles.showModalCaller}>{state.players[state.showCallerIndex]?.name} called Show</Text>
             )}
 
-            {(state.roundScores ?? []).some((s) => s.delta === 15) && (
+              {(state.roundScores ?? []).some((s) => s.delta === 15) && (
               <Animated.View entering={FadeIn.delay(300)} style={styles.penaltyBox}>
                 <Ionicons name="alert-circle" size={14} color={COLORS.error} />
                 <Text style={styles.penaltyText}>
                   Shower had lowest score — +15 penalty
-                </Text>
+                  </Text>
               </Animated.View>
-            )}
+              )}
 
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.showScroll}>
+              <ScrollView showsVerticalScrollIndicator={false} style={styles.showScroll}>
               {(state.roundScores ?? []).map((score, si) => {
-                const p = state.players.find((pl) => pl.id === score.playerId);
-                const hand = p?.hand ?? [];
+                  const p = state.players.find((pl) => pl.id === score.playerId);
+                  const hand = p?.hand ?? [];
                 const isMe = p?.id === humanPlayer?.id;
                 const pIdx = state.players.findIndex((pl) => pl.id === score.playerId);
                 const avatarColor = AVATAR_COLORS[pIdx % AVATAR_COLORS.length];
@@ -816,7 +825,7 @@ function GameOnlineTable({
                   p && isOpponentBot(p.id)
                     ? botAvatarIndexForPlayer(opponents, p.id, isOpponentBot)
                     : null;
-                return (
+                  return (
                   <Animated.View
                     key={score.playerId}
                     entering={FadeIn.delay(200 + si * 100)}
@@ -830,7 +839,7 @@ function GameOnlineTable({
                     />
 
                     <View
-                      style={[
+                              style={[
                         styles.showRowAvatar,
                         botIdx == null && { backgroundColor: avatarColor },
                       ]}
@@ -863,8 +872,8 @@ function GameOnlineTable({
                             <View key={c?.id ?? i} style={styles.showMiniCard}>
                               <Text style={[styles.showMiniCardTxt, { color: isRed ? COLORS.cardRed : COLORS.cardBlack }]}>
                                 {c?.rank ?? ""}{c?.suit ? (SUIT_SYMBOLS[c.suit] ?? "") : ""}
-                              </Text>
-                            </View>
+                            </Text>
+                          </View>
                           );
                         })}
                         {hand.length > 4 && <Text style={styles.showMore}>+{hand.length - 4}</Text>}
@@ -872,32 +881,32 @@ function GameOnlineTable({
                     </View>
 
                     <View style={styles.showRowRight}>
-                      <Text style={styles.showHandScore}>{score.score} pts</Text>
+                        <Text style={styles.showHandScore}>{score.score} pts</Text>
                       <Text style={[styles.showDelta,
                         score.delta === 15 ? styles.deltaBad :
                         score.delta === 0 ? styles.deltaGood : styles.deltaNeutral]}>
                         {score.delta === 15 ? "+15 ⚠" : score.delta === 0 ? "+0 ✓" : `+${score.delta}`}
-                      </Text>
+                        </Text>
                       <Text style={styles.showTotal}>{p?.totalScore ?? score.delta} total</Text>
-                    </View>
+                      </View>
                   </Animated.View>
-                );
-              })}
-            </ScrollView>
+                  );
+                })}
+              </ScrollView>
 
-            <Pressable
-              style={styles.nextRoundBtn}
-              onPress={() => {
-                setShowReveal(false);
+              <Pressable
+                style={styles.nextRoundBtn}
+                onPress={() => {
+                  setShowReveal(false);
                 if ((state.phase as string) === "gameOver") router.replace("/results");
                 else nextRound();
               }}
             >
               <LinearGradient colors={[COLORS.primary, COLORS.primaryDark]} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
-              <Text style={styles.nextRoundTxt}>
+                <Text style={styles.nextRoundTxt}>
                 {(state.phase as string) === "gameOver" ? "See Final Results →" : `Next Round ${state.round + 1} →`}
-              </Text>
-            </Pressable>
+                </Text>
+              </Pressable>
           </Animated.View>
         </Animated.View>
       )}
@@ -914,12 +923,12 @@ const styles = StyleSheet.create({
   },
   loadingIcon: {
     width: 90, height: 90, borderRadius: 45,
-    backgroundColor: "rgba(255,215,0,0.1)",
+    backgroundColor: `rgba(${ONLINE_FLOW.rgb},0.12)`,
     justifyContent: "center", alignItems: "center",
     borderWidth: 2, borderColor: COLORS.border,
   },
   dealingText: {
-    color: COLORS.gold, fontSize: 20, fontWeight: "700", letterSpacing: 3,
+    color: ONLINE_FLOW.accent, fontSize: 20, fontWeight: "700", letterSpacing: 3,
   },
 
   // ── TABLE BACKGROUND ──
@@ -973,7 +982,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
-    shadowColor: COLORS.gold,
+    shadowColor: ONLINE_FLOW.accent,
     shadowOffset: { width: 0, height: 0 },
     shadowRadius: 10,
     elevation: 8,
@@ -1005,7 +1014,7 @@ const styles = StyleSheet.create({
     top: -2, right: -2,
     width: 10, height: 10,
     borderRadius: 5,
-    backgroundColor: COLORS.gold,
+    backgroundColor: ONLINE_FLOW.accent,
     borderWidth: 2,
     borderColor: "#000",
   },
@@ -1055,14 +1064,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   pickHintBadge: {
-    backgroundColor: COLORS.gold,
+    backgroundColor: ONLINE_FLOW.accent,
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
     marginBottom: 2,
   },
   pickHintText: {
-    color: "#000",
+    color: "#fff",
     fontSize: 9,
     fontWeight: "800",
   },
@@ -1274,14 +1283,14 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
   },
   throwBtn: {
-    backgroundColor: COLORS.gold,
+    backgroundColor: ONLINE_FLOW.accent,
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 8,
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    shadowColor: COLORS.gold,
+    shadowColor: ONLINE_FLOW.accent,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.5,
     shadowRadius: 6,
@@ -1291,7 +1300,7 @@ const styles = StyleSheet.create({
     opacity: 0.3,
   },
   throwBtnText: {
-    color: "#000",
+    color: "#fff",
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0.5,
@@ -1340,7 +1349,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.1)",
   },
   roundBadgeText: {
-    color: COLORS.gold,
+    color: ONLINE_FLOW.accent,
     fontSize: 12,
     fontWeight: "800",
     minWidth: 14,
@@ -1365,8 +1374,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     gap: 10,
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.25)",
-    shadowColor: COLORS.gold,
+    borderColor: `rgba(${ONLINE_FLOW.rgb},0.3)`,
+    shadowColor: ONLINE_FLOW.accent,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 20,
@@ -1376,7 +1385,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0, left: 0, right: 0,
     height: 2,
-    backgroundColor: COLORS.gold,
+    backgroundColor: ONLINE_FLOW.accent,
     opacity: 0.4,
   },
   scoreModalHeader: {
@@ -1387,7 +1396,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   scoreModalTitle: {
-    color: COLORS.gold,
+    color: ONLINE_FLOW.accent,
     fontSize: 16,
     fontWeight: "800",
     letterSpacing: 1,
@@ -1403,9 +1412,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.05)",
   },
   scoreRowMe: {
-    backgroundColor: "rgba(255,215,0,0.1)",
+    backgroundColor: `rgba(${ONLINE_FLOW.rgb},0.12)`,
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.25)",
+    borderColor: `rgba(${ONLINE_FLOW.rgb},0.28)`,
   },
   scoreAvatar: {
     width: 26,
@@ -1420,11 +1429,11 @@ const styles = StyleSheet.create({
     color: COLORS.text, fontSize: 13, fontWeight: "600", flex: 1,
   },
   youTag: {
-    backgroundColor: "rgba(255,215,0,0.15)",
+    backgroundColor: `rgba(${ONLINE_FLOW.rgb},0.18)`,
     borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1,
-    borderWidth: 1, borderColor: "rgba(255,215,0,0.4)",
+    borderWidth: 1, borderColor: `rgba(${ONLINE_FLOW.rgb},0.45)`,
   },
-  youTagTxt: { color: COLORS.gold, fontSize: 8, fontWeight: "900" },
+  youTagTxt: { color: ONLINE_FLOW.accent, fontSize: 8, fontWeight: "900" },
   outTag: {
     backgroundColor: COLORS.eliminated,
     borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1,
@@ -1454,7 +1463,7 @@ const styles = StyleSheet.create({
     borderRadius: 22, padding: 24,
     overflow: "hidden", gap: 12,
     borderWidth: 1, borderColor: COLORS.border,
-    shadowColor: COLORS.gold,
+    shadowColor: ONLINE_FLOW.accent,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.25,
     shadowRadius: 20,
@@ -1463,16 +1472,16 @@ const styles = StyleSheet.create({
   },
   confirmModalBorder: {
     position: "absolute", top: 0, left: 0, right: 0, height: 2,
-    backgroundColor: COLORS.gold, opacity: 0.5,
+    backgroundColor: ONLINE_FLOW.accent, opacity: 0.5,
   },
   confirmIconWrap: {
     width: 60, height: 60, borderRadius: 30,
-    backgroundColor: "rgba(255,215,0,0.1)",
+    backgroundColor: `rgba(${ONLINE_FLOW.rgb},0.12)`,
     justifyContent: "center", alignItems: "center",
     borderWidth: 1.5, borderColor: COLORS.border,
   },
   confirmTitle: {
-    color: COLORS.gold, fontSize: 22, fontWeight: "900", textAlign: "center",
+    color: ONLINE_FLOW.accent, fontSize: 22, fontWeight: "900", textAlign: "center",
   },
   confirmMsg: {
     color: COLORS.textMuted, fontSize: 14, textAlign: "center", lineHeight: 20,
@@ -1487,10 +1496,10 @@ const styles = StyleSheet.create({
   confirmOk: {
     flex: 1, borderRadius: 12, paddingVertical: 12,
     alignItems: "center", overflow: "hidden",
-    shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 4 },
+    shadowColor: ONLINE_FLOW.accent, shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5, shadowRadius: 8, elevation: 8,
   },
-  confirmOkTxt: { color: "#000", fontSize: 15, fontWeight: "900" },
+  confirmOkTxt: { color: "#fff", fontSize: 15, fontWeight: "900" },
 
   // Show reveal modal
   showModal: {
@@ -1502,7 +1511,7 @@ const styles = StyleSheet.create({
     gap: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: COLORS.gold,
+    shadowColor: ONLINE_FLOW.accent,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 24,
@@ -1510,15 +1519,15 @@ const styles = StyleSheet.create({
   },
   showModalBorderDecor: {
     position: "absolute", top: 0, left: 0, right: 0, height: 2.5,
-    backgroundColor: COLORS.gold, opacity: 0.6,
+    backgroundColor: ONLINE_FLOW.accent, opacity: 0.6,
   },
   showModalHeader: {
     flexDirection: "row", alignItems: "center",
     justifyContent: "center", gap: 10,
   },
   showModalTitle: {
-    color: COLORS.gold, fontSize: 20, fontWeight: "900", letterSpacing: 3,
-    textShadowColor: COLORS.gold, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 12,
+    color: ONLINE_FLOW.accent, fontSize: 20, fontWeight: "900", letterSpacing: 3,
+    textShadowColor: ONLINE_FLOW.accent, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 12,
   },
   showModalCaller: {
     color: COLORS.textMuted, fontSize: 12, fontWeight: "600",
@@ -1541,7 +1550,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(255,255,255,0.06)",
   },
   showRowMe: {
-    borderColor: "rgba(255,215,0,0.3)",
+    borderColor: `rgba(${ONLINE_FLOW.rgb},0.32)`,
   },
   showRowAvatar: {
     width: 34,
@@ -1599,7 +1608,7 @@ export default function GameOnlineScreen() {
         <LinearGradient colors={[COLORS.bgDeep, COLORS.tableDark]} style={StyleSheet.absoluteFill} />
         <Animated.View entering={ZoomIn}>
           <View style={styles.loadingIcon}>
-            <MaterialCommunityIcons name="cards-playing" size={52} color={COLORS.gold} />
+            <MaterialCommunityIcons name="cards-playing" size={52} color={ONLINE_FLOW.accent} />
           </View>
         </Animated.View>
         <Animated.Text entering={FadeIn.delay(200)} style={styles.dealingText}>Loading match…</Animated.Text>

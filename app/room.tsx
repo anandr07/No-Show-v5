@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,14 +11,18 @@ import {
 } from "react-native";
 import Animated, { ZoomIn, SlideInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import COLORS, { AVATAR_COLORS } from "@/constants/colors";
+import { MULTIPLAYER_FLOW } from "@/constants/flowThemes";
+import { useAuth } from "@/context/AuthContext";
 import { useMultiplayerGame } from "@/context/MultiplayerGameContext";
+import { useSettings } from "@/context/SettingsContext";
 import { normalizeRoomCodeForJoin } from "@/lib/gameEngine";
 import { getApiUrl } from "@/lib/query-client";
+import { resolvePlayerDisplayName } from "@/lib/player-display";
 
 type Phase = "home" | "create" | "join" | "lobby";
 
@@ -30,6 +34,30 @@ export default function RoomScreen() {
   const [phase, setPhase] = useState<Phase>("home");
   const [playerName, setPlayerName] = useState("Player");
   const [roomCode, setRoomCode] = useState("");
+
+  const { user } = useAuth();
+  const { displayName: savedName, isLoading: settingsLoading } = useSettings();
+
+  const syncNameFromProfile = useCallback(() => {
+    if (settingsLoading) return;
+    const resolved = resolvePlayerDisplayName({
+      localName: savedName,
+      authDisplayName: user?.user_metadata?.display_name,
+      email: user?.email ?? null,
+      fallback: "Player",
+    });
+    setPlayerName(resolved.slice(0, 16));
+  }, [settingsLoading, savedName, user?.user_metadata?.display_name, user?.email]);
+
+  useEffect(() => {
+    syncNameFromProfile();
+  }, [syncNameFromProfile]);
+
+  useFocusEffect(
+    useCallback(() => {
+      syncNameFromProfile();
+    }, [syncNameFromProfile])
+  );
 
   const {
     room,
@@ -212,7 +240,7 @@ export default function RoomScreen() {
         onPress={handleJoin}
         disabled={isConnecting}
       >
-        <LinearGradient colors={["#27AE60", "#145A32"]} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
+        <LinearGradient colors={["#3498DB", MULTIPLAYER_FLOW.accentDark]} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
         {isConnecting ? (
           <Text style={styles.mainActionText}>Joining...</Text>
         ) : (
@@ -233,7 +261,7 @@ export default function RoomScreen() {
           <Text style={styles.lobbySub}>{room?.players.length ?? 0}/4 players</Text>
         </View>
         <Pressable style={styles.shareBtn} onPress={shareCode}>
-          <Ionicons name="share-outline" size={18} color={COLORS.gold} />
+          <Ionicons name="share-outline" size={18} color={MULTIPLAYER_FLOW.accent} />
           <View style={styles.codeChip}>
             <Text style={styles.codeChipText}>{room?.code}</Text>
           </View>
@@ -292,7 +320,7 @@ export default function RoomScreen() {
             disabled={!canStart}
           >
             <LinearGradient
-              colors={canStart ? ["#F39C12", "#D35400"] : ["#333", "#222"]}
+              colors={canStart ? [MULTIPLAYER_FLOW.accent, MULTIPLAYER_FLOW.accentDark] : ["#333", "#222"]}
               style={StyleSheet.absoluteFill}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
@@ -307,7 +335,13 @@ export default function RoomScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#051810", "#0A2416"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        colors={[...MULTIPLAYER_FLOW.bgGradient]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
+      <View style={styles.glowSpot} />
 
       <View style={[styles.header, { paddingTop: topInset + 8, paddingLeft: insets.left + 12 }]}>
         <Pressable
@@ -322,7 +356,7 @@ export default function RoomScreen() {
             }
           }}
         >
-          <Ionicons name="arrow-back" size={22} color={COLORS.gold} />
+          <Ionicons name="arrow-back" size={22} color={MULTIPLAYER_FLOW.accent} />
         </Pressable>
         <Text style={styles.headerTitle}>MULTIPLAYER</Text>
         <View style={{ width: 40 }} />
@@ -344,6 +378,17 @@ export default function RoomScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  glowSpot: {
+    position: "absolute",
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: MULTIPLAYER_FLOW.accent,
+    opacity: 0.05,
+    top: "18%",
+    left: "50%",
+    transform: [{ translateX: -140 }],
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -355,14 +400,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255,215,0,0.1)",
+    backgroundColor: `rgba(${MULTIPLAYER_FLOW.rgb},0.12)`,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.3)",
+    borderColor: `rgba(${MULTIPLAYER_FLOW.rgb},0.35)`,
   },
   headerTitle: {
-    color: COLORS.gold,
+    color: MULTIPLAYER_FLOW.accent,
     fontSize: 18,
     fontWeight: "800",
     letterSpacing: 2,
@@ -401,7 +446,7 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: "rgba(255,255,255,0.07)",
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.3)",
+    borderColor: `rgba(${MULTIPLAYER_FLOW.rgb},0.35)`,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -431,7 +476,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#2980B9",
   },
   joinBtn: {
-    backgroundColor: "#27AE60",
+    backgroundColor: MULTIPLAYER_FLOW.accentDark,
   },
   halfBtnText: {
     color: "#fff",
@@ -508,15 +553,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "rgba(255,215,0,0.1)",
+    backgroundColor: `rgba(${MULTIPLAYER_FLOW.rgb},0.12)`,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.3)",
+    borderColor: `rgba(${MULTIPLAYER_FLOW.rgb},0.35)`,
   },
   codeChip: {
-    backgroundColor: COLORS.gold,
+    backgroundColor: MULTIPLAYER_FLOW.accent,
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -543,8 +588,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.06)",
   },
   lobbyPlayerRowMe: {
-    backgroundColor: "rgba(255,215,0,0.08)",
-    borderColor: "rgba(255,215,0,0.25)",
+    backgroundColor: `rgba(${MULTIPLAYER_FLOW.rgb},0.1)`,
+    borderColor: `rgba(${MULTIPLAYER_FLOW.rgb},0.28)`,
   },
   lobbyAvatar: {
     width: 36,
@@ -565,7 +610,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   ownerBadge: {
-    backgroundColor: COLORS.gold,
+    backgroundColor: MULTIPLAYER_FLOW.accent,
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -579,15 +624,15 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   youBadge: {
-    backgroundColor: "rgba(255,215,0,0.2)",
+    backgroundColor: `rgba(${MULTIPLAYER_FLOW.rgb},0.2)`,
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.4)",
+    borderColor: `rgba(${MULTIPLAYER_FLOW.rgb},0.45)`,
   },
   youBadgeText: {
-    color: COLORS.gold,
+    color: MULTIPLAYER_FLOW.accent,
     fontSize: 9,
     fontWeight: "800",
   },

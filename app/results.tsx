@@ -12,10 +12,14 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
-  withDelay,
+  withRepeat,
+  withSequence,
+  Easing,
   ZoomIn,
   FadeIn,
+  FadeInDown,
   SlideInDown,
+  interpolate,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -68,13 +72,38 @@ export default function ResultsScreen() {
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
 
-  const trophy = useSharedValue(0);
-  const trophyStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: trophy.value }, { rotate: `${trophy.value * 5 - 5}deg` }],
+  const trophyIcon = useSharedValue(0.5);
+  const winnerRing = useSharedValue(0.88);
+  const glowPulse = useSharedValue(0);
+
+  const trophyIconStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: trophyIcon.value },
+      { rotate: `${interpolate(trophyIcon.value, [0.5, 1], [-12, 0])}deg` },
+    ],
+  }));
+
+  const winnerRingStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: winnerRing.value }],
+    opacity: interpolate(winnerRing.value, [0.88, 1], [0.85, 1]),
+  }));
+
+  const glowPulseStyle = useAnimatedStyle(() => ({
+    opacity: 0.42 + 0.38 * glowPulse.value,
+    transform: [{ scale: 1 + 0.08 * glowPulse.value }],
   }));
 
   useEffect(() => {
-    trophy.value = withSpring(1, { damping: 8, stiffness: 100 });
+    trophyIcon.value = withSpring(1, { damping: 10, stiffness: 140 });
+    winnerRing.value = withSpring(1, { damping: 11, stiffness: 120 });
+    glowPulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.quad) })
+      ),
+      -1,
+      false
+    );
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     playSuccess();
   }, []);
@@ -130,53 +159,68 @@ export default function ResultsScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      <View style={[styles.header, { paddingTop: topInset + 8 }]}>
+      <Animated.View
+        entering={FadeInDown.duration(380).springify()}
+        style={[styles.header, { paddingTop: topInset + 8 }]}
+      >
         <Text style={styles.headerTitle}>GAME OVER</Text>
-      </View>
+      </Animated.View>
 
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: bottomInset + 24 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Winner spotlight */}
-        <Animated.View style={[trophyStyle, styles.winnerSpotlight]}>
-          <LinearGradient
-            colors={["rgba(255,215,0,0.25)", "rgba(255,215,0,0.05)"]}
-            style={styles.winnerGlow}
-          />
-          <MaterialCommunityIcons name="trophy" size={48} color={COLORS.gold} />
-          <Text style={styles.winnerLabel}>WINNER</Text>
-          <View
-            style={[
-              styles.winnerAvatar,
-              winner &&
-                resolveResultsBotAvatarIndex(winner.id) == null && {
-                  backgroundColor:
-                    AVATAR_COLORS[state.players.findIndex((pl) => pl.id === winner.id) % AVATAR_COLORS.length],
-                },
-            ]}
-          >
-            {winner &&
-              (resolveResultsBotAvatarIndex(winner.id) != null ? (
-                <BotAvatarImage
-                  botAvatarIndex={resolveResultsBotAvatarIndex(winner.id)!}
-                  size={56}
-                  borderColor="rgba(255,255,255,0.25)"
-                  backgroundColor="rgba(0,0,0,0.35)"
-                />
-              ) : winner.type === "human" ? (
-                <PlayerAvatarImage
-                  avatarIndex={avatarIndex}
-                  size={56}
-                  borderColor="rgba(255,255,255,0.25)"
-                  backgroundColor="rgba(0,0,0,0.35)"
-                />
-              ) : (
-                <Text style={styles.winnerInitial}>{winner.name[0]}</Text>
-              ))}
-          </View>
-          <Text style={styles.winnerName}>{winner?.name}</Text>
-          <Text style={styles.winnerScore}>{winner?.totalScore ?? 0} pts</Text>
+        <Animated.View entering={ZoomIn.springify().damping(14).stiffness(120).delay(60)} style={styles.winnerSpotlight}>
+          <Animated.View style={[styles.winnerGlowPulseWrap, glowPulseStyle]} pointerEvents="none">
+            <LinearGradient
+              colors={["rgba(255,215,0,0.32)", "rgba(255,215,0,0.04)"]}
+              style={styles.winnerGlow}
+            />
+          </Animated.View>
+          <Animated.View style={trophyIconStyle}>
+            <MaterialCommunityIcons name="trophy" size={48} color={COLORS.gold} />
+          </Animated.View>
+          <Animated.Text entering={FadeIn.delay(180)} style={styles.winnerLabel}>
+            WINNER
+          </Animated.Text>
+          <Animated.View style={winnerRingStyle}>
+            <View
+              style={[
+                styles.winnerAvatar,
+                winner &&
+                  resolveResultsBotAvatarIndex(winner.id) == null && {
+                    backgroundColor:
+                      AVATAR_COLORS[state.players.findIndex((pl) => pl.id === winner.id) % AVATAR_COLORS.length],
+                  },
+              ]}
+            >
+              {winner &&
+                (resolveResultsBotAvatarIndex(winner.id) != null ? (
+                  <BotAvatarImage
+                    botAvatarIndex={resolveResultsBotAvatarIndex(winner.id)!}
+                    size={56}
+                    borderColor="rgba(255,255,255,0.25)"
+                    backgroundColor="rgba(0,0,0,0.35)"
+                  />
+                ) : winner.type === "human" ? (
+                  <PlayerAvatarImage
+                    avatarIndex={avatarIndex}
+                    size={56}
+                    borderColor="rgba(255,255,255,0.25)"
+                    backgroundColor="rgba(0,0,0,0.35)"
+                  />
+                ) : (
+                  <Text style={styles.winnerInitial}>{winner.name[0]}</Text>
+                ))}
+            </View>
+          </Animated.View>
+          <Animated.Text entering={FadeIn.delay(260)} style={styles.winnerName}>
+            {winner?.name}
+          </Animated.Text>
+          <Animated.Text entering={FadeIn.delay(340)} style={styles.winnerScore}>
+            {winner?.totalScore ?? 0} pts
+          </Animated.Text>
         </Animated.View>
 
         {/* Rankings */}
@@ -294,12 +338,19 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     paddingHorizontal: 40,
   },
-  winnerGlow: {
+  winnerGlowPulseWrap: {
     position: "absolute",
     width: 200,
     height: 200,
     borderRadius: 100,
     top: 0,
+    alignSelf: "center",
+    overflow: "hidden",
+  },
+  winnerGlow: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
   },
   winnerLabel: {
     color: COLORS.gold,

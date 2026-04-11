@@ -15,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import COLORS from "@/constants/colors";
+import { ONLINE_FLOW } from "@/constants/flowThemes";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import { resolveOnlineAnalyticsUserId } from "@/lib/online-analytics-user-id";
@@ -83,7 +84,12 @@ export default function LevelsMapScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#051810", "#0A2416", "#133D24"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        colors={[...ONLINE_FLOW.bgGradient]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
       <View style={[styles.header, { paddingTop: topInset + vScale(8, 6, 14), paddingHorizontal: scale(16, 12, 22), marginBottom: vScale(8, 4, 12) }]}>
         <Pressable
           style={styles.backBtn}
@@ -92,7 +98,7 @@ export default function LevelsMapScreen() {
             router.back();
           }}
         >
-          <Ionicons name="arrow-back" size={18} color={COLORS.gold} />
+          <Ionicons name="arrow-back" size={18} color={ONLINE_FLOW.accent} />
         </Pressable>
         <Text style={styles.title}>LEVEL MAP</Text>
         <View style={{ width: scale(52, 44, 60) }} />
@@ -133,7 +139,7 @@ export default function LevelsMapScreen() {
                 </View>
                 {idx < LEVELS.length - 1 ? (
                   <View style={[styles.connectorWrapHorizontal, { paddingHorizontal: scale(8, 6, 12) }]}>
-                    <Ionicons name="arrow-forward" size={18} color={COLORS.gold} />
+                    <Ionicons name="arrow-forward" size={18} color={ONLINE_FLOW.accent} />
                   </View>
                 ) : null}
               </View>
@@ -158,7 +164,7 @@ export default function LevelsMapScreen() {
               </View>
               {idx < LEVELS.length - 1 ? (
                 <View style={[styles.connectorWrap, { paddingVertical: vScale(6, 4, 10) }]}>
-                  <Ionicons name="arrow-down" size={18} color={COLORS.gold} />
+                  <Ionicons name="arrow-down" size={18} color={ONLINE_FLOW.accent} />
                 </View>
               ) : null}
             </View>
@@ -180,13 +186,13 @@ const styles = StyleSheet.create({
     width: 52,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "rgba(255,215,0,0.1)",
+    backgroundColor: `rgba(${ONLINE_FLOW.rgb},0.12)`,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.32)",
+    borderColor: `rgba(${ONLINE_FLOW.rgb},0.35)`,
   },
-  title: { color: COLORS.gold, fontSize: 16, fontWeight: "800", letterSpacing: 1 },
+  title: { color: ONLINE_FLOW.accent, fontSize: 16, fontWeight: "800", letterSpacing: 1 },
   scrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 12,
@@ -211,8 +217,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.06)",
   },
   levelCardCurrent: {
-    borderColor: "rgba(255,215,0,0.5)",
-    backgroundColor: "rgba(255,215,0,0.10)",
+    borderColor: `rgba(${ONLINE_FLOW.rgb},0.55)`,
+    backgroundColor: `rgba(${ONLINE_FLOW.rgb},0.12)`,
   },
   levelImage: {
     width: 78,
@@ -223,13 +229,13 @@ const styles = StyleSheet.create({
   levelRange: { color: COLORS.textDim, fontSize: 12, marginTop: 2 },
   currentBadge: {
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.45)",
+    borderColor: `rgba(${ONLINE_FLOW.rgb},0.5)`,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: "rgba(255,215,0,0.15)",
+    backgroundColor: `rgba(${ONLINE_FLOW.rgb},0.18)`,
   },
-  currentBadgeText: { color: COLORS.gold, fontSize: 10, fontWeight: "900", letterSpacing: 0.4 },
+  currentBadgeText: { color: ONLINE_FLOW.accent, fontSize: 10, fontWeight: "900", letterSpacing: 0.4 },
   connectorWrap: { alignItems: "center", paddingVertical: 6 },
   connectorWrapHorizontal: {
     justifyContent: "center",
@@ -264,10 +270,10 @@ const styles = StyleSheet.create({
     top: 8,
     right: 8,
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.45)",
+    borderColor: `rgba(${ONLINE_FLOW.rgb},0.5)`,
     borderRadius: 8,
     paddingHorizontal: 6,
     paddingVertical: 3,
-    backgroundColor: "rgba(255,215,0,0.15)",
+    backgroundColor: `rgba(${ONLINE_FLOW.rgb},0.18)`,
   },
 });

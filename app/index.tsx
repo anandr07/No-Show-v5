@@ -152,6 +152,29 @@ function Panel({ data, index }: { data: PanelData; index: number }) {
   );
 }
 
+function GemBalanceChip() {
+  const { gemBalance } = useSettings();
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.gemChip,
+        pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
+      ]}
+      onPress={() => {
+        playTap();
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        router.push("/store");
+      }}
+      accessibilityLabel={`Gems: ${gemBalance}. Open store`}
+    >
+      <MaterialCommunityIcons name="diamond-stone" size={18} color="#5DADE2" />
+      <Text style={styles.gemChipText} numberOfLines={1}>
+        {gemBalance.toLocaleString()}
+      </Text>
+    </Pressable>
+  );
+}
+
 interface PlayerMenuProps {
   visible: boolean;
   onClose: () => void;
@@ -348,18 +371,21 @@ export default function HomeScreen() {
         entering={FadeIn.duration(800)}
         style={[styles.header, { paddingTop: topInset + 12 }]}
       >
-        <Pressable
-          style={({ pressed }) => [
-            styles.settingsIconBtn,
-            pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
-          ]}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push("/settings");
-          }}
-        >
-          <Ionicons name="settings-outline" size={22} color={COLORS.gold} />
-        </Pressable>
+        <View style={styles.headerLeftRow}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.settingsIconBtn,
+              pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
+            ]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/settings");
+            }}
+          >
+            <Ionicons name="settings-outline" size={22} color={COLORS.gold} />
+          </Pressable>
+          <GemBalanceChip />
+        </View>
         <View style={styles.headerCenter}>
           <Animated.View style={titleShimmerStyle}>
             <Text style={styles.logoText}>NO-SHOW</Text>
@@ -367,20 +393,35 @@ export default function HomeScreen() {
           <Text style={styles.logoSub}>THE CARD GAME</Text>
           <View style={styles.logoDivider} />
         </View>
-        <Pressable
-          style={({ pressed }) => [
-            styles.playerIconBtn,
-            pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
-          ]}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setPlayerMenuVisible((v) => !v);
-          }}
-        >
-          <View style={styles.playerIconInner}>
-            <Text style={styles.playerIconSymbol}>♠</Text>
-          </View>
-        </Pressable>
+        <View style={styles.headerRightRow}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.storeIconBtn,
+              pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
+            ]}
+            onPress={() => {
+              playTap();
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/store");
+            }}
+          >
+            <MaterialCommunityIcons name="shopping-outline" size={22} color={COLORS.gold} />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.playerIconBtn,
+              pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
+            ]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setPlayerMenuVisible((v) => !v);
+            }}
+          >
+            <View style={styles.playerIconInner}>
+              <Text style={styles.playerIconSymbol}>♠</Text>
+            </View>
+          </Pressable>
+        </View>
       </Animated.View>
 
       {/* Player menu dropdown (home only) */}
@@ -458,9 +499,50 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     zIndex: 2,
+    gap: 8,
   },
-  headerCenter: { alignItems: "center", flex: 1 },
+  headerLeftRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  },
+  headerRightRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  },
+  headerCenter: { alignItems: "center", flex: 1, minWidth: 0 },
+  gemChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(93,173,226,0.12)",
+    borderWidth: 1.5,
+    borderColor: "rgba(93,173,226,0.4)",
+    maxWidth: 120,
+  },
+  gemChipText: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "800",
+    flexShrink: 1,
+  },
   settingsIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,215,0,0.08)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,215,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  storeIconBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,

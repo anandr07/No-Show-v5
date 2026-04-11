@@ -24,6 +24,7 @@ export const COLORS = {
   primary: "#2ECC71",
   primaryDark: "#27AE60",
   purple: "#9B59B6",
+  purpleDark: "#6C3483",
   blue: "#2980B9",
   blueDark: "#1A5276",
   cyan: "#1ABC9C",

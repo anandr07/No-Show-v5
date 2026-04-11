@@ -6,6 +6,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import COLORS from "@/constants/colors";
+import { ONLINE_FLOW } from "@/constants/flowThemes";
 import { useResponsive } from "@/lib/responsive";
 
 export default function HowPointsScreen() {
@@ -15,7 +16,12 @@ export default function HowPointsScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={["#051810", "#0A2416", "#133D24"]} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        colors={[...ONLINE_FLOW.bgGradient]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
 
       <View style={[styles.header, { paddingTop: topInset + vScale(8, 6, 14), paddingHorizontal: scale(16, 12, 22), marginBottom: vScale(10, 8, 14) }]}>
         <Pressable
@@ -28,7 +34,7 @@ export default function HowPointsScreen() {
             router.back();
           }}
         >
-          <Ionicons name="arrow-back" size={18} color={COLORS.gold} />
+          <Ionicons name="arrow-back" size={18} color={ONLINE_FLOW.accent} />
         </Pressable>
         <Text style={[styles.title, { fontSize: mScale(16, 0.5, 14, 19) }]}>HOW POINTS WORK</Text>
         <View style={{ width: scale(52, 44, 60) }} />
@@ -68,19 +74,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   backBtn: {
-    backgroundColor: "rgba(255,215,0,0.1)",
+    backgroundColor: `rgba(${ONLINE_FLOW.rgb},0.12)`,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.32)",
+    borderColor: `rgba(${ONLINE_FLOW.rgb},0.35)`,
   },
-  title: { color: COLORS.gold, fontWeight: "800", letterSpacing: 1 },
+  title: { color: ONLINE_FLOW.accent, fontWeight: "800", letterSpacing: 1 },
   card: {
     borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.35)",
+    borderColor: `rgba(${ONLINE_FLOW.rgb},0.38)`,
     backgroundColor: "rgba(255,255,255,0.06)",
   },
-  ruleTitle: { color: COLORS.gold, fontWeight: "900" },
+  ruleTitle: { color: ONLINE_FLOW.accent, fontWeight: "900" },
   ruleText: { color: COLORS.text, fontWeight: "700" },
   ruleSubText: { color: COLORS.textDim },
   divider: {
