@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: no-show-backend
+    runtime: node
+    region: singapore   # closest to India — change to "ohio" (US East) if preferred
+    plan: free          # upgrade to "starter" ($7/mo) if you need always-on + WebSocket persistence
+
+    buildCommand: npm install && npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=server_dist
+
+    startCommand: node server_dist/index.js
+
+    # Render auto-sets PORT — the server already reads process.env.PORT
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # ── Copy these values from your .env file ──────────────────────────────
+      - key: DATABASE_URL
+        sync: false   # fill in Render dashboard — never commit secrets to git
+
+      - key: JWT_SECRET
+        sync: false
+
+      - key: SUPABASE_URL
+        sync: false
+
+      - key: SUPABASE_ANON_KEY
+        sync: false
+
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # ── Set this after your first deploy so you know the URL ───────────────
+      - key: CORS_ORIGIN
+        sync: false   # e.g. https://no-show-backend.onrender.com

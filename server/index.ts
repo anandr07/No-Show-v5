@@ -28,10 +28,21 @@ function setupCors(app: express.Application) {
       });
     }
 
+    // Allow any origins listed in CORS_ORIGIN (comma-separated).
+    // Set this on Render to your Render service URL, e.g.:
+    //   CORS_ORIGIN=https://your-app.onrender.com
+    if (process.env.CORS_ORIGIN) {
+      process.env.CORS_ORIGIN.split(",").forEach((o) => {
+        const trimmed = o.trim();
+        if (trimmed) origins.add(trimmed);
+      });
+    }
+
     const origin = req.header("origin");
 
     // Allow localhost and local network origins (Expo, phones on same WiFi)
     const isLocalhost =
+      !origin || // mobile apps (React Native) send no Origin header
       origin?.startsWith("http://localhost:") ||
       origin?.startsWith("http://127.0.0.1:") ||
       origin?.startsWith("http://192.168.") ||
