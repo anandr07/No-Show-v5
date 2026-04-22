@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
 }
 
@@ -17,9 +17,9 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
+  async getUserByEmail(email: string): Promise<User | undefined> {
     const db = getDb();
-    const [user] = await db.select().from(users).where(eq(users.username, username)).limit(1);
+    const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase().trim())).limit(1);
     return user;
   }
 
@@ -27,9 +27,16 @@ export class DatabaseStorage implements IStorage {
     const db = getDb();
     const id = randomUUID();
     const hashed = await bcrypt.hash(insertUser.password, 12);
+    const email = insertUser.email.toLowerCase().trim();
     const [user] = await db
       .insert(users)
-      .values({ id, username: insertUser.username, password: hashed })
+      .values({
+        id,
+        accountType: process.env.AUTH_PG_ACCOUNT_TYPE?.trim() || "registered",
+        email,
+        passwordHash: hashed,
+        status: process.env.AUTH_PG_USER_STATUS?.trim() || "active",
+      })
       .returning();
     return user;
   }

@@ -36,6 +36,8 @@ interface OnlineGameContextValue {
   isBotFilled: boolean;
   error: string;
   queueStartedAt: number | null;
+  /** Server hint: seconds until a table is guaranteed (1–45). Used for progress cap. */
+  queueMaxSeconds: number;
   selectedCards: string[];
 
   joinQueue: (mode: QueueMode, playerName: string) => Promise<void>;
@@ -69,12 +71,17 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
   const [error, setError] = useState("");
   const [isBotFilled, setIsBotFilled] = useState(false);
   const [queueStartedAt, setQueueStartedAt] = useState<number | null>(null);
+  const [queueMaxSeconds, setQueueMaxSeconds] = useState(45);
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
   const [quickChatEvents, setQuickChatEvents] = useState<QuickChatEvent[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
+  // Incremented each time a new WS is opened so stale handlers from old sockets
+  // don't mutate state after the socket has been replaced.
+  const wsSessionRef = useRef(0);
 
   const closeSocket = useCallback(() => {
+    wsSessionRef.current += 1; // invalidate any in-flight handlers
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -94,8 +101,15 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
       if (msg.status === "queued") {
         setPhase("queueing");
         setError("");
+        const max = Number(msg.maxWaitSeconds);
+        if (Number.isFinite(max) && max > 0) {
+          setQueueMaxSeconds(Math.min(45, Math.max(1, Math.round(max))));
+        } else {
+          setQueueMaxSeconds(45);
+        }
       } else if (msg.status === "cancelled") {
         setPhase("idle");
+        setQueueMaxSeconds(45);
       }
       return;
     }
@@ -133,8 +147,15 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
       return;
     }
 
-    if (msg.type === "ONLINE_ERROR" || msg.type === "GAME_ACTION_ERROR") {
+    if (msg.type === "ONLINE_ERROR") {
       setError(String(msg.message ?? "Online error"));
+      return;
+    }
+    if (msg.type === "GAME_ACTION_ERROR") {
+      const m = String(msg.message ?? "");
+      // Server used to reject duplicate NEXT_ROUND; now idempotent — ignore legacy / race messages.
+      if (m === "Not in show phase") return;
+      setError(m || "Online error");
       return;
     }
   }, [pushQuickChat]);
@@ -142,10 +163,19 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
   const connectSocket = useCallback(() => {
     const wsUrl = getWebSocketUrl("/ws-online");
 
+    // Stamp this session so stale handlers from a previous socket don't interfere.
+    wsSessionRef.current += 1;
+    const session = wsSessionRef.current;
+
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
+    let opened = false;
+
+    ws.onopen = () => { opened = true; };
+
     ws.onmessage = (event) => {
+      if (wsSessionRef.current !== session) return;
       try {
         const msg = JSON.parse(event.data);
         handleMessage(msg);
@@ -153,14 +183,34 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
         // ignore
       }
     };
-    ws.onerror = () => setError("Cannot reach online server.");
-    ws.onclose = () => {
-      setPhase((prev) => (prev === "finished" ? "finished" : "idle"));
+
+    ws.onerror = () => {
+      if (wsSessionRef.current !== session) return;
+      // Only surface the error if the connection never opened (i.e. server unreachable).
+      // Mid-game errors are handled by onclose below.
+      if (!opened) {
+        setError("Cannot reach online server. Make sure the game server is running.");
+        setPhase("idle");
+        setQueueStartedAt(null);
+      }
     };
+
+    ws.onclose = () => {
+      if (wsSessionRef.current !== session) return;
+      setPhase((prev) => {
+        // Never interrupt an active or finished game on a connection drop —
+        // the game screen handles its own disconnect messaging.
+        if (prev === "playing" || prev === "matched" || prev === "finished") return prev;
+        return "idle";
+      });
+    };
+
     return ws;
   }, [handleMessage]);
 
   const joinQueue = useCallback(async (queueMode: QueueMode, playerName: string) => {
+    // Close any pre-existing connection so we start fresh.
+    closeSocket();
     setError("");
     const id = isValidUuid(user?.id)
       ? user.id
@@ -168,6 +218,7 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
     setUserId(id);
     setMode(queueMode);
     setQueueStartedAt(Date.now());
+    setQueueMaxSeconds(45);
 
     const ws = connectSocket();
     ws.onopen = () => {
@@ -180,7 +231,7 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
         })
       );
     };
-  }, [connectSocket, user?.id]);
+  }, [connectSocket, closeSocket, user?.id]);
 
   const cancelQueue = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -188,6 +239,7 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
     }
     setPhase("idle");
     setQueueStartedAt(null);
+    setQueueMaxSeconds(45);
     setMode(null);
   }, []);
 
@@ -265,6 +317,7 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
     setState(null);
     setError("");
     setQueueStartedAt(null);
+    setQueueMaxSeconds(45);
     setIsBotFilled(false);
     setSelectedCards([]);
     setQuickChatEvents([]);
@@ -282,6 +335,7 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
       isBotFilled,
       error,
       queueStartedAt,
+      queueMaxSeconds,
       selectedCards,
       joinQueue,
       cancelQueue,
@@ -310,6 +364,7 @@ export function OnlineGameProvider({ children }: { children: React.ReactNode }) 
       isBotFilled,
       error,
       queueStartedAt,
+      queueMaxSeconds,
       selectedCards,
       joinQueue,
       cancelQueue,

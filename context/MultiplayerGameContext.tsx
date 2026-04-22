@@ -156,7 +156,9 @@ export function MultiplayerGameProvider({ children }: { children: React.ReactNod
         setError(msg.message as string);
         setIsConnecting(false);
       } else if (msg.type === "GAME_ACTION_ERROR") {
-        setError(msg.message as string);
+        const m = String(msg.message ?? "");
+        if (m === "Not in show phase") return;
+        setError(m);
       }
     },
     [closeWs, pushQuickChat]

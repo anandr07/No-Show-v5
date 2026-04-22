@@ -18,7 +18,8 @@
       "bundleIdentifier": "com.noshow.cardgame"
     },
     "android": {
-      "package": "com.noshow.cardgame",
+      "package": "com.anandraj.noshowcardgame",
+      "permissions": [],
       "adaptiveIcon": {
         "backgroundColor": "#0A2416",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -37,7 +38,8 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "./plugins/removeRecordAudio"
     ],
     "experiments": {
       "typedRoutes": true,

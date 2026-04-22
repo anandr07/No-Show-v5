@@ -182,7 +182,7 @@ interface PlayerMenuProps {
 }
 
 function PlayerMenu({ visible, onClose, topInset }: PlayerMenuProps) {
-  const { user } = useAuth();
+  const { user, isGuest, signOut } = useAuth();
   const { displayName: savedName, avatarIndex } = useSettings();
   const displayName = resolvePlayerDisplayName({
     localName: savedName,
@@ -191,23 +191,33 @@ function PlayerMenu({ visible, onClose, topInset }: PlayerMenuProps) {
     fallback: "Guest",
   });
 
-  const menuItems = [
+  type MenuItem = {
+    id: string;
+    label: string;
+    subtitle: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    destructive?: boolean;
+    accent?: boolean;
+    onPress: () => void | Promise<void>;
+  };
+
+  const commonItems: MenuItem[] = [
     {
       id: "username",
-      label: "Username",
-      subtitle: displayName,
-      icon: "person-outline" as const,
-        onPress: () => {
+      label: isGuest ? "Playing as Guest" : "Username",
+      subtitle: isGuest ? "Progress saved on this device" : displayName,
+      icon: "person-outline",
+      onPress: () => {
         onClose();
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.push("/profile");
+        if (!isGuest) router.push("/profile");
       },
     },
     {
       id: "past-games",
       label: "Past Games",
       subtitle: "View game history",
-      icon: "time-outline" as const,
+      icon: "time-outline",
       onPress: () => {
         onClose();
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -218,7 +228,7 @@ function PlayerMenu({ visible, onClose, topInset }: PlayerMenuProps) {
       id: "statistics",
       label: "Statistics",
       subtitle: "Win rate & stats",
-      icon: "stats-chart-outline" as const,
+      icon: "stats-chart-outline",
       onPress: () => {
         onClose();
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -226,6 +236,42 @@ function PlayerMenu({ visible, onClose, topInset }: PlayerMenuProps) {
       },
     },
   ];
+
+  const authItems: MenuItem[] = isGuest
+    ? [
+        {
+          id: "sign-in",
+          label: "Sign In",
+          subtitle: "Save progress & play online",
+          icon: "log-in-outline",
+          accent: true,
+          onPress: async () => {
+            onClose();
+            playTap();
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            await signOut();
+          },
+        },
+      ]
+    : user
+    ? [
+        {
+          id: "sign-out",
+          label: "Sign out",
+          subtitle: "Log out of this account",
+          icon: "log-out-outline",
+          destructive: true,
+          onPress: async () => {
+            onClose();
+            playTap();
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            await signOut();
+          },
+        },
+      ]
+    : [];
+
+  const menuItems: MenuItem[] = [...commonItems, ...authItems];
 
   if (!visible) return null;
 
@@ -243,36 +289,81 @@ function PlayerMenu({ visible, onClose, topInset }: PlayerMenuProps) {
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
         >
-          {menuItems.map((item) => (
-            <Pressable
-              key={item.id}
-              style={({ pressed }) => [
-                styles.playerMenuItem,
-                pressed && styles.playerMenuItemPressed,
-              ]}
-              onPress={item.onPress}
-            >
-              <View style={styles.playerMenuIconWrap}>
-                {item.id === "username" ? (
-                  <PlayerAvatarImage
-                    avatarIndex={avatarIndex}
-                    size={28}
-                    borderColor="rgba(255,215,0,0.35)"
-                    backgroundColor="rgba(0,0,0,0.4)"
-                  />
-                ) : (
-                  <Ionicons name={item.icon} size={18} color={COLORS.gold} />
+          {menuItems.map((item, idx) => {
+            const isAccent = item.accent;
+            const isDestructive = item.destructive;
+            const iconColor = isDestructive
+              ? COLORS.error
+              : isAccent
+              ? COLORS.gold
+              : COLORS.gold;
+            const showDivider =
+              isGuest && item.id === "sign-in";
+            return (
+              <React.Fragment key={item.id}>
+                {showDivider && (
+                  <View style={styles.playerMenuDivider} />
                 )}
-              </View>
-              <View style={styles.playerMenuTextWrap}>
-                <Text style={styles.playerMenuLabel}>{item.label}</Text>
-                <Text style={styles.playerMenuSubtitle} numberOfLines={1}>
-                  {item.subtitle}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
-            </Pressable>
-          ))}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.playerMenuItem,
+                    pressed && styles.playerMenuItemPressed,
+                    isAccent && styles.playerMenuItemAccent,
+                  ]}
+                  onPress={() => void item.onPress()}
+                >
+                  <View
+                    style={[
+                      styles.playerMenuIconWrap,
+                      isDestructive && styles.playerMenuIconWrapDestructive,
+                      isAccent && styles.playerMenuIconWrapAccent,
+                    ]}
+                  >
+                    {item.id === "username" ? (
+                      <PlayerAvatarImage
+                        avatarIndex={avatarIndex}
+                        size={28}
+                        borderColor="rgba(255,215,0,0.35)"
+                        backgroundColor="rgba(0,0,0,0.4)"
+                      />
+                    ) : (
+                      <Ionicons name={item.icon} size={18} color={iconColor} />
+                    )}
+                  </View>
+                  <View style={styles.playerMenuTextWrap}>
+                    <Text
+                      style={[
+                        styles.playerMenuLabel,
+                        isDestructive && styles.playerMenuLabelDestructive,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.playerMenuSubtitle,
+                        isDestructive && styles.playerMenuSubtitleDestructive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item.subtitle}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={16}
+                    color={
+                      isDestructive
+                        ? "rgba(229,57,53,0.55)"
+                        : isAccent
+                        ? "rgba(255,215,0,0.7)"
+                        : COLORS.textDim
+                    }
+                  />
+                </Pressable>
+              </React.Fragment>
+            );
+          })}
         </LinearGradient>
       </Animated.View>
     </>
@@ -284,6 +375,14 @@ export default function HomeScreen() {
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
   const [playerMenuVisible, setPlayerMenuVisible] = useState(false);
+  const { user, isGuest, isLoading: authLoading } = useAuth();
+
+  // Only redirect to auth if: loading is done AND no user AND not a guest session.
+  useEffect(() => {
+    if (!authLoading && user === null && !isGuest) {
+      router.replace("/auth");
+    }
+  }, [authLoading, user, isGuest]);
 
   const shimmer = useSharedValue(0);
   useEffect(() => {
@@ -621,7 +720,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  playerMenuIconWrapDestructive: {
+    backgroundColor: "rgba(229,57,53,0.14)",
+  },
+  playerMenuIconWrapAccent: {
+    backgroundColor: "rgba(255,215,0,0.18)",
+  },
+  playerMenuItemAccent: {
+    backgroundColor: "rgba(255,215,0,0.05)",
+  },
+  playerMenuDivider: {
+    height: 1,
+    backgroundColor: "rgba(255,215,0,0.15)",
+    marginHorizontal: 14,
+    marginVertical: 4,
+  },
   playerMenuTextWrap: { flex: 1 },
+  playerMenuLabelDestructive: {
+    color: COLORS.error,
+  },
+  playerMenuSubtitleDestructive: {
+    color: "rgba(229,57,53,0.75)",
+  },
   playerMenuLabel: {
     color: COLORS.gold,
     fontSize: 14,

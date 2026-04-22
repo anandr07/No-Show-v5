@@ -9,6 +9,7 @@ import {
   type GameAction,
 } from "./gameState";
 import { registerAuthRoutes } from "./auth";
+import { registerPlayerDataRoutes } from "./playerData";
 import { OnlineMatchmakingService } from "./onlineMatchmaking";
 import { isSupabaseConfigured } from "./supabase";
 import { isValidQuickChatMessageId } from "../constants/quickChatMessages";
@@ -65,6 +66,7 @@ function getRoomInfo(room: Room) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   registerAuthRoutes(app);
+  registerPlayerDataRoutes(app);
 
   const httpServer = createServer(app);
   const onlineService = new OnlineMatchmakingService();

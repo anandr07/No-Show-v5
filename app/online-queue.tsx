@@ -1,29 +1,67 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, Pressable, Platform } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Platform,
+  ActivityIndicator,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+  Easing,
+} from "react-native-reanimated";
+import { Ionicons } from "@expo/vector-icons";
 import COLORS from "@/constants/colors";
 import { ONLINE_FLOW } from "@/constants/flowThemes";
 import { useOnlineGame } from "@/context/OnlineGameContext";
 import { useResponsive } from "@/lib/responsive";
+
+const DISPLAY_CAP = 45;
 
 export default function OnlineQueueScreen() {
   const insets = useSafeAreaInsets();
   const { scale, vScale, mScale } = useResponsive();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const { mode } = useLocalSearchParams<{ mode?: "online_2p" | "online_3p" }>();
-  const { phase, queueStartedAt, cancelQueue, error, isBotFilled } = useOnlineGame();
-  const [elapsed, setElapsed] = useState(0);
+  const { phase, queueStartedAt, cancelQueue, error } = useOnlineGame();
 
+  const pulse = useSharedValue(1);
   useEffect(() => {
-    const timer = setInterval(() => {
-      if (queueStartedAt) {
-        setElapsed(Math.floor((Date.now() - queueStartedAt) / 1000));
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [queueStartedAt]);
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1.06, { duration: 1200, easing: Easing.inOut(Easing.sin) }),
+        withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.sin) })
+      ),
+      -1,
+      false
+    );
+  }, [pulse]);
+
+  const ringStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulse.value }],
+    opacity: 0.35 + 0.25 * (pulse.value - 1) / 0.06,
+  }));
+
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const secondsUp = useMemo(() => {
+    if (!queueStartedAt) return 1;
+    const raw = Math.floor((Date.now() - queueStartedAt) / 1000);
+    // Count up: 1, 2, 3 … (never 0 on screen), cap at display max
+    return Math.min(DISPLAY_CAP, Math.max(1, raw + 1));
+  }, [queueStartedAt, tick]);
 
   useEffect(() => {
     if (phase === "playing") {
@@ -34,12 +72,10 @@ export default function OnlineQueueScreen() {
   const label = useMemo(
     () =>
       mode === "online_3p"
-        ? "VS 3 Players (4 at table)"
-        : "VS 2 Players (3 at table)",
+        ? "4 seats · competitive table"
+        : "3 seats · competitive table",
     [mode]
   );
-  const capped = Math.min(180, elapsed);
-  const progress = capped / 180;
 
   return (
     <View style={styles.container}>
@@ -50,33 +86,81 @@ export default function OnlineQueueScreen() {
         end={{ x: 0.5, y: 1 }}
       />
 
-      <View style={[styles.header, { paddingTop: topInset + vScale(8, 6, 14), paddingHorizontal: scale(20, 14, 28) }]}>
-        <Text style={[styles.title, { fontSize: mScale(18, 0.5, 16, 22) }]}>MATCHMAKING</Text>
+      <View
+        style={[
+          styles.header,
+          { paddingTop: topInset + vScale(8, 6, 14), paddingHorizontal: scale(20, 14, 28) },
+        ]}
+      >
+        <Pressable
+          onPress={() => {
+            cancelQueue();
+            router.replace("/online");
+          }}
+          hitSlop={12}
+          style={styles.backHit}
+        >
+          <Ionicons name="chevron-back" size={26} color={ONLINE_FLOW.accent} />
+        </Pressable>
+        <Text style={[styles.title, { fontSize: mScale(13, 0.5, 12, 15) }]}>
+          FINDING A TABLE
+        </Text>
+        <View style={{ width: 26 }} />
       </View>
 
-      <View style={[styles.content, { gap: vScale(10, 8, 14), paddingHorizontal: scale(20, 14, 28) }]}>
-        <Text style={[styles.modeText, { fontSize: mScale(20, 0.5, 17, 24) }]}>{label}</Text>
-        <Text style={[styles.statusText, { fontSize: mScale(13, 0.5, 12, 15) }]}>Searching globally for players...</Text>
-        <Text style={[styles.timerText, { fontSize: mScale(44, 0.55, 36, 56) }]}>{capped}s</Text>
-        <View style={[styles.progressTrack, { height: vScale(10, 8, 14) }]}>
-          <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+      <View style={[styles.content, { paddingHorizontal: scale(20, 14, 28) }]}>
+        <Text style={[styles.modeLine, { fontSize: mScale(15, 0.5, 14, 17) }]}>{label}</Text>
+
+        <View style={[styles.hero, { marginTop: vScale(28, 22, 36) }]}>
+          <Animated.View
+            style={[
+              styles.glowRing,
+              {
+                width: scale(168, 140, 190),
+                height: scale(168, 140, 190),
+                borderRadius: scale(84, 70, 95),
+              },
+              ringStyle,
+            ]}
+          />
+          <View
+            style={[
+              styles.timerCircle,
+              {
+                width: scale(152, 128, 172),
+                height: scale(152, 128, 172),
+                borderRadius: scale(76, 64, 86),
+              },
+            ]}
+          >
+            <Text style={[styles.secLabel, { fontSize: mScale(11, 0.5, 10, 12) }]}>seconds</Text>
+            <Text style={[styles.timerNum, { fontSize: mScale(52, 0.55, 44, 64) }]}>
+              {secondsUp}
+            </Text>
+          </View>
         </View>
-        <Text style={[styles.ruleText, { fontSize: mScale(12, 0.5, 11, 14) }]}>
-          {capped < 180
-            ? `Matchmaking timeout at 180s. Bots will fill empty slots if needed.`
-            : "Timeout reached. Waiting for bots to fill empty slots..."}
-        </Text>
-        {isBotFilled ? <Text style={[styles.botWarn, { fontSize: mScale(12, 0.5, 11, 14) }]}>Bot-filled match started (reduced points applies).</Text> : null}
-        {error ? <Text style={[styles.error, { fontSize: mScale(12, 0.5, 11, 14) }]}>{error}</Text> : null}
+
+        <View style={[styles.statusRow, { marginTop: vScale(32, 26, 40), gap: scale(10, 8, 12) }]}>
+          <ActivityIndicator color={ONLINE_FLOW.accent} size="small" />
+          <Text style={[styles.statusText, { fontSize: mScale(14, 0.5, 13, 16) }]}>
+            Looking for open seats…
+          </Text>
+        </View>
+
+        {error ? (
+          <Text style={[styles.error, { fontSize: mScale(12, 0.5, 11, 14), marginTop: vScale(16, 12, 20) }]}>
+            {error}
+          </Text>
+        ) : null}
 
         <Pressable
           style={[
             styles.cancelBtn,
             {
-              marginTop: vScale(16, 12, 24),
-              borderRadius: mScale(12, 0.5, 10, 15),
-              paddingHorizontal: scale(20, 16, 26),
-              paddingVertical: vScale(12, 10, 16),
+              marginTop: vScale(28, 22, 36),
+              borderRadius: mScale(14, 0.5, 12, 16),
+              paddingHorizontal: scale(28, 22, 34),
+              paddingVertical: vScale(14, 12, 18),
             },
           ]}
           onPress={() => {
@@ -84,7 +168,7 @@ export default function OnlineQueueScreen() {
             router.replace("/online");
           }}
         >
-          <Text style={[styles.cancelText, { fontSize: mScale(14, 0.5, 12, 16) }]}>Cancel Queue</Text>
+          <Text style={[styles.cancelText, { fontSize: mScale(15, 0.5, 14, 17) }]}>Leave queue</Text>
         </Pressable>
       </View>
     </View>
@@ -93,33 +177,74 @@ export default function OnlineQueueScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: {},
-  title: { color: ONLINE_FLOW.accent, fontWeight: "900", letterSpacing: 1.2 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  backHit: { padding: 4 },
+  title: {
+    color: ONLINE_FLOW.accent,
+    fontWeight: "800",
+    letterSpacing: 2,
+  },
   content: {
     flex: 1,
+    alignItems: "center",
+    paddingTop: 8,
+  },
+  modeLine: {
+    color: COLORS.textDim,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  hero: {
+    alignItems: "center",
     justifyContent: "center",
+  },
+  glowRing: {
+    position: "absolute",
+    borderWidth: 2,
+    borderColor: `rgba(${ONLINE_FLOW.rgb},0.45)`,
+    backgroundColor: `rgba(${ONLINE_FLOW.rgb},0.08)`,
+  },
+  timerCircle: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  secLabel: {
+    color: COLORS.textMuted,
+    fontWeight: "600",
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  timerNum: {
+    color: COLORS.text,
+    fontWeight: "900",
+    fontVariant: ["tabular-nums"],
+  },
+  statusRow: {
+    flexDirection: "row",
     alignItems: "center",
   },
-  modeText: { color: COLORS.text, fontWeight: "800" },
-  statusText: { color: COLORS.textDim, textAlign: "center" },
-  timerText: { color: ONLINE_FLOW.accent, fontWeight: "900" },
-  progressTrack: {
-    width: "84%",
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    overflow: "hidden",
+  statusText: {
+    color: COLORS.text,
+    fontWeight: "600",
   },
-  progressFill: {
-    height: "100%",
-    backgroundColor: ONLINE_FLOW.accent,
+  error: {
+    color: COLORS.error,
+    textAlign: "center",
   },
-  ruleText: { color: COLORS.textMuted, textAlign: "center" },
-  botWarn: { color: "#ffcc66", fontWeight: "700" },
-  error: { color: COLORS.error, textAlign: "center" },
   cancelBtn: {
+    backgroundColor: `rgba(${ONLINE_FLOW.rgb},0.2)`,
     borderWidth: 1,
-    borderColor: `rgba(${ONLINE_FLOW.rgb},0.4)`,
+    borderColor: `rgba(${ONLINE_FLOW.rgb},0.45)`,
   },
-  cancelText: { color: COLORS.text, fontWeight: "700" },
+  cancelText: {
+    color: COLORS.text,
+    fontWeight: "700",
+  },
 });

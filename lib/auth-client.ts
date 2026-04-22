@@ -1,15 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getApiUrl } from "@/lib/api-url";
 
 const TOKEN_KEY = "auth_token";
 
 function getApiBase(): string {
-  if (typeof process !== "undefined" && process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
-  }
-  if (typeof window !== "undefined" && window.location) {
-    return "";
-  }
-  return "http://localhost:5000";
+  // Always use the same host as WebSockets / React Query (not "" same-origin),
+  // so Expo web (e.g. :8081) still talks to the API on :5000.
+  return getApiUrl();
 }
 
 async function getStoredToken(): Promise<string | null> {
@@ -68,7 +65,14 @@ export const authClient = {
       if (data.token) await setStoredToken(data.token);
       return { user: data.user, error: null };
     } catch (e) {
-      return { user: null, error: "Network error. Is the server running?" };
+      const hint =
+        typeof e === "object" && e !== null && "message" in e
+          ? String((e as Error).message)
+          : String(e);
+      return {
+        user: null,
+        error: `Cannot reach API (${getApiUrl()}). ${hint}. On a phone, set EXPO_PUBLIC_DOMAIN to your PC's LAN IP (see .env.example) or set EXPO_PUBLIC_API_URL.`,
+      };
     }
   },
 
@@ -86,7 +90,14 @@ export const authClient = {
       if (data.token) await setStoredToken(data.token);
       return { user: data.user, error: null };
     } catch (e) {
-      return { user: null, error: "Network error. Is the server running?" };
+      const hint =
+        typeof e === "object" && e !== null && "message" in e
+          ? String((e as Error).message)
+          : String(e);
+      return {
+        user: null,
+        error: `Cannot reach API (${getApiUrl()}). ${hint}. On a phone, set EXPO_PUBLIC_DOMAIN to your PC's LAN IP or EXPO_PUBLIC_API_URL.`,
+      };
     }
   },
 

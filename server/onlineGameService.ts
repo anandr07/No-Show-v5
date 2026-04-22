@@ -7,6 +7,14 @@ export interface OnlinePlayer {
   userId: string | null;
   name: string;
   isBot: boolean;
+  /** Set when `isBot` — row in `bot_profiles` (online_match_players.bot_profile_id). */
+  botProfileId?: string | null;
+}
+
+export interface RoundRecord {
+  roundNumber: number;
+  scores: { playerId: string; score: number; delta: number }[];
+  endedAt: Date;
 }
 
 export interface OnlineMatchRuntime {
@@ -16,6 +24,8 @@ export interface OnlineMatchRuntime {
   state: GameState;
   createdAt: number;
   isBotFilled: boolean;
+  /** Completed rounds captured as phase transitions through "show". */
+  roundHistory: RoundRecord[];
 }
 
 export class OnlineGameService {
@@ -35,6 +45,7 @@ export class OnlineGameService {
       state: initial,
       createdAt: Date.now(),
       isBotFilled,
+      roundHistory: [],
     };
     this.matches.set(id, runtime);
     return runtime;
@@ -51,8 +62,26 @@ export class OnlineGameService {
   applyAction(matchId: string, action: GameAction): { state: GameState; error?: string } | null {
     const match = this.matches.get(matchId);
     if (!match) return null;
+
+    const prevPhase = match.state.phase;
+    const prevRound = match.state.round;
+
     const result = applyGameAction(match.state, action);
     match.state = result.state;
+
+    // Detect transition into "show" phase — a round just completed
+    if (
+      prevPhase !== "show" &&
+      result.state.phase === "show" &&
+      result.state.roundScores.length > 0
+    ) {
+      match.roundHistory.push({
+        roundNumber: prevRound,
+        scores: result.state.roundScores.map((s) => ({ ...s })),
+        endedAt: new Date(),
+      });
+    }
+
     return result;
   }
 
@@ -71,11 +100,29 @@ export class OnlineGameService {
       if (!current) break;
       if (!isBot) break;
 
+      const prevPhase = match.state.phase;
+      const prevRound = match.state.round;
+
       const botAction = decideBotAction(match.state, current.id);
       if (!botAction) break;
+
       const result = applyGameAction(match.state, botAction);
       match.state = result.state;
       progressed = true;
+
+      // Track bot-triggered round completions too
+      if (
+        prevPhase !== "show" &&
+        result.state.phase === "show" &&
+        result.state.roundScores.length > 0
+      ) {
+        match.roundHistory.push({
+          roundNumber: prevRound,
+          scores: result.state.roundScores.map((s) => ({ ...s })),
+          endedAt: new Date(),
+        });
+      }
+
       if (result.error) break;
     }
 

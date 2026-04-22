@@ -187,7 +187,6 @@ function GameOnlineTable({
   const insets = useSafeAreaInsets();
 
   const [showScoreModal, setShowScoreModal] = useState(false);
-  const [showReveal, setShowReveal] = useState(false);
   const [showConfirmShow, setShowConfirmShow] = useState(false);
   const [throwError, setThrowError] = useState("");
   const [quickChatOpen, setQuickChatOpen] = useState(false);
@@ -227,9 +226,8 @@ function GameOnlineTable({
     transform: [{ scale: pulse.value }],
   }));
 
-  useEffect(() => {
-    if (state.phase === "show") setShowReveal(true);
-  }, [state.phase]);
+  /** Scorecard overlay is driven only by server phase so every client sees the same show state. */
+  const showRevealOverlay = state.phase === "show";
 
   const prevPhaseRef = useRef(state.phase);
   useEffect(() => {
@@ -775,8 +773,8 @@ function GameOnlineTable({
         </View>
       )}
 
-      {/* ── SHOW REVEAL SCORECARD ── */}
-      {showReveal && (
+      {/* ── SHOW REVEAL SCORECARD (server phase "show" — same for all players) ── */}
+      {showRevealOverlay && (
         <Animated.View entering={FadeIn.duration(300)} style={styles.overlayContainer}>
           <LinearGradient
             colors={["rgba(0,0,0,0.92)", "rgba(0,5,0,0.95)"]}
@@ -897,15 +895,13 @@ function GameOnlineTable({
               <Pressable
                 style={styles.nextRoundBtn}
                 onPress={() => {
-                  setShowReveal(false);
-                if ((state.phase as string) === "gameOver") router.replace("/results");
-                else nextRound();
-              }}
-            >
+                  if (state.phase === "show") {
+                    nextRound();
+                  }
+                }}
+              >
               <LinearGradient colors={[COLORS.primary, COLORS.primaryDark]} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
-                <Text style={styles.nextRoundTxt}>
-                {(state.phase as string) === "gameOver" ? "See Final Results →" : `Next Round ${state.round + 1} →`}
-                </Text>
+                <Text style={styles.nextRoundTxt}>{`Next Round ${state.round + 1} →`}</Text>
               </Pressable>
           </Animated.View>
         </Animated.View>

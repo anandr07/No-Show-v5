@@ -225,7 +225,10 @@ export function applyGameAction(
     }
 
     case "NEXT_ROUND": {
-      if (state.phase !== "show") return { state, error: "Not in show phase" };
+      // Idempotent: duplicate taps / multiple players clicking "Next round" should not error.
+      if (state.phase !== "show") {
+        return { state };
+      }
 
       const activePlayers = state.players.filter((p) => p.status === "active");
       if (activePlayers.length <= 1) {

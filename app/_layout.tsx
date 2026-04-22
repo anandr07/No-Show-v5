@@ -24,6 +24,7 @@ SplashScreen.preventAutoHideAsync();
 function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
+      <Stack.Screen name="auth" />
       <Stack.Screen name="index" />
       <Stack.Screen name="vs-setup" />
       <Stack.Screen name="game" />

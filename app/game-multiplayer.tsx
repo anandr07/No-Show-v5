@@ -152,7 +152,6 @@ export default function GameMultiplayerScreen() {
 
   const insets = useSafeAreaInsets();
   const [showScoreModal, setShowScoreModal] = useState(false);
-  const [showReveal, setShowReveal] = useState(false);
   const [showConfirmShow, setShowConfirmShow] = useState(false);
   const [throwError, setThrowError] = useState("");
   const [quickChatOpen, setQuickChatOpen] = useState(false);
@@ -187,10 +186,6 @@ export default function GameMultiplayerScreen() {
     state?.currentPlayerIndex ?? 0,
     state?.players ?? [],
   );
-
-  useEffect(() => {
-    if (state?.phase === "show") setShowReveal(true);
-  }, [state?.phase]);
 
   const prevPhaseRef = useRef<string | undefined>(state?.phase);
   useEffect(() => {
@@ -241,6 +236,9 @@ export default function GameMultiplayerScreen() {
     router.replace("/results");
     return null;
   }
+
+  /** Same as online: overlay follows server phase so every player sees the show scorecard. */
+  const showRevealOverlay = state.phase === "show";
 
   const humanPlayer = state.players.find((p) => p.id === playerId);
   const opponents = state.players.filter((p) => p.id !== playerId && p.status === "active");
@@ -723,8 +721,8 @@ export default function GameMultiplayerScreen() {
         </View>
       )}
 
-      {/* ── SHOW REVEAL SCORECARD (match VS + online) ── */}
-      {showReveal && (
+      {/* ── SHOW REVEAL SCORECARD (server phase "show" — all players) ── */}
+      {showRevealOverlay && (
         <Animated.View entering={FadeIn.duration(300)} style={styles.showRevealOverlayContainer}>
           <LinearGradient
             colors={["rgba(0,0,0,0.92)", "rgba(0,5,0,0.95)"]}
@@ -834,15 +832,13 @@ export default function GameMultiplayerScreen() {
             <Pressable
               style={styles.showRevealNextRoundBtn}
               onPress={() => {
-                setShowReveal(false);
-                if ((state.phase as string) === "gameOver") router.replace("/results");
-                else nextRound();
+                if (state.phase === "show") {
+                  nextRound();
+                }
               }}
             >
               <LinearGradient colors={[COLORS.primary, COLORS.primaryDark]} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
-              <Text style={styles.showRevealNextRoundTxt}>
-                {(state.phase as string) === "gameOver" ? "See Final Results →" : `Next Round ${state.round + 1} →`}
-              </Text>
+              <Text style={styles.showRevealNextRoundTxt}>{`Next Round ${state.round + 1} →`}</Text>
             </Pressable>
           </Animated.View>
         </Animated.View>

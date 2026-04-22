@@ -13,6 +13,7 @@ import {
   numeric,
   smallint,
   uniqueIndex,
+  customType,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -215,15 +216,65 @@ export const friends = pgTable(
   ]
 );
 
-// ─── Legacy users (kept for backward compatibility, migrate to profiles) ───
+// ─── Postgres enum-backed columns (labels must exist in your DB; override via AUTH_PG_* in auth) ───
 
+const accountTypeColumn = customType<{ data: string; driverData: string }>({
+  dataType() {
+    return "account_type";
+  },
+  toDriver(value: string) {
+    return value;
+  },
+  fromDriver(value: string) {
+    return value;
+  },
+});
+
+const userStatusColumn = customType<{ data: string; driverData: string }>({
+  dataType() {
+    return "user_status";
+  },
+  toDriver(value: string) {
+    return value;
+  },
+  fromDriver(value: string) {
+    return value;
+  },
+});
+
+const authIdentityProviderColumn = customType<{ data: string; driverData: string }>({
+  dataType() {
+    // Enum *type name* in Postgres for `auth_identities.provider` (often `provider`, not `auth_provider`).
+    return "provider";
+  },
+  toDriver(value: string) {
+    return value;
+  },
+  fromDriver(value: string) {
+    return value;
+  },
+});
+
+/** Matches `public.users` (email + password_hash + enums). */
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
+  accountType: accountTypeColumn("account_type").notNull(),
+  email: text("email").unique(),
+  passwordHash: text("password_hash"),
+  status: userStatusColumn("status").notNull().default("active"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+});
+
+export const authIdentities = pgTable("auth_identities", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
     .notNull()
-    .defaultNow(),
+    .references(() => users.id, { onDelete: "cascade" }),
+  provider: authIdentityProviderColumn("provider").notNull(),
+  providerSubject: text("provider_subject").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ─── Relations ───────────────────────────────────────────────────────────
@@ -299,9 +350,9 @@ export const selectGameSchema = createSelectSchema(games);
 export const insertGamePlayerSchema = createInsertSchema(gamePlayers);
 export const selectGamePlayerSchema = createSelectSchema(gamePlayers);
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const insertUserSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
 });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -353,24 +404,31 @@ export const profileSettings = pgTable("player_settings", {
   hapticsEnabled: boolean("haptics_enabled").notNull().default(true),
   notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
   languageCode: varchar("language_code", { length: 8 }).notNull().default("en"),
+  activeCardBackId: varchar("active_card_back_id", { length: 32 }).notNull().default("default"),
+  activeTableTheme: varchar("active_table_theme", { length: 16 }).notNull().default("green"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Ranked / profile row — maps to `public.player_profiles` in Supabase. */
 export const playerRankStats = pgTable(
-  "player_rank_stats",
+  "player_profiles",
   {
     userId: uuid("user_id")
       .primaryKey()
       .references(() => users.id, { onDelete: "cascade" }),
-    displayName: text("display_name").notNull().default("Player"),
+    displayName: varchar("display_name", { length: 64 }).notNull(),
+    avatarUrl: text("avatar_url"),
+    avatarIndex: smallint("avatar_index").notNull().default(0),
+    countryCode: varchar("country_code", { length: 2 }),
     onlinePointsTotal: integer("online_points_total").notNull().default(0),
     onlineWins: integer("online_wins").notNull().default(0),
     onlineLosses: integer("online_losses").notNull().default(0),
     onlineGamesPlayed: integer("online_games_played").notNull().default(0),
     currentLevel: smallint("current_level").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("player_rank_stats_points_idx").on(t.onlinePointsTotal)]
+  (t) => [index("player_profiles_online_points_idx").on(t.onlinePointsTotal)]
 );
 
 export const matchmakingTickets = pgTable(
@@ -545,3 +603,105 @@ export const levelDefinitions = pgTable("level_definitions", {
   minPoints: integer("min_points").notNull(),
   maxPoints: integer("max_points"),
 });
+
+// ─── Cosmetics & Gem economy ──────────────────────────────────────────────────
+
+const cosmeticTypeColumn = customType<{ data: string; driverData: string }>({
+  dataType() { return "cosmetic_type"; },
+  toDriver(v: string) { return v; },
+  fromDriver(v: string) { return v; },
+});
+
+const gemTxTypeColumn = customType<{ data: string; driverData: string }>({
+  dataType() { return "gem_tx_type"; },
+  toDriver(v: string) { return v; },
+  fromDriver(v: string) { return v; },
+});
+
+const iapPlatformColumn = customType<{ data: string; driverData: string }>({
+  dataType() { return "iap_platform"; },
+  toDriver(v: string) { return v; },
+  fromDriver(v: string) { return v; },
+});
+
+/** One row per user — authoritative gem balance. */
+export const playerGemBalance = pgTable("player_gem_balance", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  balance: integer("balance").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Immutable audit ledger: every gem credit/debit. */
+export const gemTransactions = pgTable(
+  "gem_transactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    txType: gemTxTypeColumn("tx_type").notNull(),
+    amount: integer("amount").notNull(),
+    balanceAfter: integer("balance_after").notNull(),
+    refId: text("ref_id"),
+    description: text("description"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("gem_transactions_user_created_idx").on(t.userId, t.createdAt)]
+);
+
+/** Records every real-money IAP. */
+export const iapPurchases = pgTable(
+  "iap_purchases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    productId: varchar("product_id", { length: 64 }).notNull(),
+    platform: iapPlatformColumn("platform").notNull(),
+    priceUsdCents: integer("price_usd_cents").notNull(),
+    gemsGranted: integer("gems_granted").notNull(),
+    platformReceipt: text("platform_receipt"),
+    platformOrderId: text("platform_order_id"),
+    isSandbox: boolean("is_sandbox").notNull().default(false),
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("iap_purchases_user_idx").on(t.userId, t.createdAt)]
+);
+
+/** Cosmetic ownership — one row per (user, type, item). */
+export const playerCosmetics = pgTable(
+  "player_cosmetics",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    cosmeticType: cosmeticTypeColumn("cosmetic_type").notNull(),
+    itemId: varchar("item_id", { length: 64 }).notNull(),
+    gemsSpent: integer("gems_spent").notNull().default(0),
+    unlockedAt: timestamp("unlocked_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("player_cosmetics_user_item_unique").on(t.userId, t.cosmeticType, t.itemId),
+    index("player_cosmetics_user_idx").on(t.userId),
+  ]
+);
+
+/** Read-only catalog of every purchasable item seeded in the DB. */
+export const cosmeticsCatalog = pgTable(
+  "cosmetics_catalog",
+  {
+    itemId: varchar("item_id", { length: 64 }).notNull(),
+    cosmeticType: cosmeticTypeColumn("cosmetic_type").notNull(),
+    title: varchar("title", { length: 128 }).notNull(),
+    description: text("description"),
+    gemPrice: integer("gem_price").notNull().default(0),
+    isFree: boolean("is_free").notNull().default(false),
+    sortOrder: smallint("sort_order").notNull().default(0),
+  },
+  (t) => [uniqueIndex("cosmetics_catalog_pk").on(t.itemId, t.cosmeticType)]
+);

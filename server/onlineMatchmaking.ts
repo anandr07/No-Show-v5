@@ -1,11 +1,14 @@
 import { randomUUID } from "crypto";
 import type { Express } from "express";
 import { WebSocketServer, WebSocket } from "ws";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import {
+  botProfiles,
   matchmakingTickets,
   onlineMatches,
   onlineMatchPlayers,
+  onlineMatchRounds,
+  onlineRoundScores,
   playerRankStats,
   onlinePointsLedger,
 } from "@shared/schema";
@@ -23,6 +26,8 @@ interface QueueEntry {
   mode: Mode;
   enqueuedAt: number;
   ticketId: string;
+  /** Absolute timestamp after which bots fill missing seats for this player. */
+  botFillAt: number;
 }
 
 interface OnlineClient {
@@ -36,11 +41,20 @@ interface OnlineClient {
 interface MatchMeta {
   matchId: string;
   dbMatchId: string;
+  /** runtime playerId → DB online_match_players.id */
   playerDbIds: Map<string, string>;
+  /** runtime playerId → DB online_match_players.id (alias for clarity) */
+  playerDbIdByRuntime: Map<string, string>;
 }
 
-const BOT_FILL_TIMEOUT_MS = 180_000;
+/** Random wait before bots fill: 25 – 45 seconds per player. */
+const BOT_FILL_MIN_MS = 25_000;
+const BOT_FILL_MAX_MS = 45_000;
 const BOT_REDUCTION_FALLBACK = 0.5;
+
+function randomBotFillDelay(): number {
+  return BOT_FILL_MIN_MS + Math.random() * (BOT_FILL_MAX_MS - BOT_FILL_MIN_MS);
+}
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -55,9 +69,16 @@ function send(ws: WebSocket, payload: object) {
   }
 }
 
-function randomBotName(index: number): string {
-  const names = ["Falcon", "Raven", "Joker", "Ace", "Bluff", "Dealer", "Shadow"];
-  return `${names[index % names.length]} Bot`;
+/** Fallback names if `bot_profiles` is empty or DB unavailable (dev). */
+const FALLBACK_BOT_NAMES = [
+  "AryanBluff", "RohanAce", "DesiDealer", "KarthikKing", "LuckyLaksh",
+  "ShivamShuffle", "RajaRummy", "TurboTushar", "BluffingBhai", "SneakySanjay",
+];
+
+function pickFallbackBotName(usedNames: Set<string>): string {
+  const available = FALLBACK_BOT_NAMES.filter((n) => !usedNames.has(n));
+  const pool = available.length > 0 ? available : FALLBACK_BOT_NAMES;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 export class OnlineMatchmakingService {
@@ -65,17 +86,19 @@ export class OnlineMatchmakingService {
   private readonly queue: QueueEntry[] = [];
   private readonly gameService = new OnlineGameService();
   private readonly matchMeta = new Map<string, MatchMeta>();
-  private readonly timer: NodeJS.Timeout;
+  private readonly timer: ReturnType<typeof setInterval>;
 
   constructor() {
+    // Poll every second so bot-fill fires within 1s of the player's personal timer.
     this.timer = setInterval(() => {
       void this.processTimeouts();
-    }, 3000);
+    }, 1000);
   }
 
   register(app: Express, wss: WebSocketServer) {
     wss.on("connection", (ws) => this.handleConnection(ws));
 
+    // ── Leaderboard ────────────────────────────────────────────────────────────
     app.get("/api/online/leaderboard", async (_req, res) => {
       try {
         const db = getDb();
@@ -85,11 +108,12 @@ export class OnlineMatchmakingService {
           LIMIT 100
         `);
         return res.json({ leaderboard: rows.rows ?? [] });
-      } catch (err) {
+      } catch {
         return res.status(500).json({ error: "Failed to load leaderboard" });
       }
     });
 
+    // ── Player profile + ledger ────────────────────────────────────────────────
     app.get("/api/online/profile/:userId", async (req, res) => {
       try {
         const userId = req.params.userId?.trim() ?? "";
@@ -121,15 +145,13 @@ export class OnlineMatchmakingService {
             }
           : null;
 
-        return res.json({
-          stats: statsOut,
-          recentLedger: lastEntries,
-        });
+        return res.json({ stats: statsOut, recentLedger: lastEntries });
       } catch {
         return res.status(500).json({ error: "Failed to load profile" });
       }
     });
 
+    // ── Match history ──────────────────────────────────────────────────────────
     app.get("/api/online/history/:userId", async (req, res) => {
       try {
         const userId = req.params.userId?.trim() ?? "";
@@ -143,19 +165,19 @@ export class OnlineMatchmakingService {
         const userUuid = sql.raw(`'${userId}'::uuid`);
         const result = await db.execute(sql`
           SELECT
-            m.id AS match_id,
-            m.mode::text AS mode,
-            m.ended_at AS ended_at,
-            m.is_bot_filled AS is_bot_filled,
-            m.winner_user_id AS winner_user_id,
+            m.id                    AS match_id,
+            m.mode::text            AS mode,
+            m.ended_at              AS ended_at,
+            m.is_bot_filled         AS is_bot_filled,
+            m.winner_user_id        AS winner_user_id,
             COALESCE(SUM(l.points_delta), 0)::int AS points_delta
           FROM online_match_players omp
           INNER JOIN online_matches m ON m.id = omp.match_id
           LEFT JOIN online_points_ledger l
             ON l.match_id = m.id AND l.user_id = ${userUuid}
           WHERE omp.user_id = ${userUuid}
-            AND omp.is_bot = false
-            AND m.status = 'completed'
+            AND omp.is_bot  = false
+            AND m.status    = 'completed'
           GROUP BY m.id, m.mode, m.ended_at, m.is_bot_filled, m.winner_user_id, m.created_at
           ORDER BY m.ended_at DESC NULLS LAST, m.created_at DESC
           LIMIT ${sql.raw(String(limit))}
@@ -164,8 +186,7 @@ export class OnlineMatchmakingService {
         const rawRows = (result.rows ?? []) as Record<string, unknown>[];
         const games = rawRows.map((r) => {
           const wid = r.winner_user_id;
-          const won =
-            wid != null && String(wid).toLowerCase() === userId.toLowerCase();
+          const won = wid != null && String(wid).toLowerCase() === userId.toLowerCase();
           return {
             match_id: String(r.match_id),
             mode: String(r.mode),
@@ -182,6 +203,8 @@ export class OnlineMatchmakingService {
       }
     });
   }
+
+  // ── WebSocket handlers ───────────────────────────────────────────────────────
 
   private handleConnection(ws: WebSocket) {
     ws.on("message", (raw) => {
@@ -266,17 +289,14 @@ export class OnlineMatchmakingService {
     }
   }
 
+  // ── Queue management ─────────────────────────────────────────────────────────
+
   private async enqueue(ws: WebSocket, userId: string, name: string, mode: Mode) {
     this.removeFromQueueByWs(ws);
     const ticketId = randomUUID();
-    this.queue.push({
-      ws,
-      userId,
-      name,
-      mode,
-      enqueuedAt: Date.now(),
-      ticketId,
-    });
+    const now = Date.now();
+    const botFillAt = now + randomBotFillDelay();
+    this.queue.push({ ws, userId, name, mode, enqueuedAt: now, ticketId, botFillAt });
 
     try {
       const db = getDb();
@@ -285,26 +305,20 @@ export class OnlineMatchmakingService {
         userId,
         mode,
         status: "queued",
-        queuedAt: new Date(),
-        expiresAt: new Date(Date.now() + BOT_FILL_TIMEOUT_MS),
+        queuedAt: new Date(now),
+        expiresAt: new Date(botFillAt),
       });
     } catch {
-      // local dev can continue with in-memory queue
+      // Local dev can continue with in-memory queue
     }
 
-    send(ws, {
-      type: "QUEUE_STATUS",
-      status: "queued",
-      mode,
-      waitSeconds: 0,
-    });
+    const maxWaitSeconds = Math.round((botFillAt - now) / 1000);
+    send(ws, { type: "QUEUE_STATUS", status: "queued", mode, waitSeconds: 0, maxWaitSeconds });
   }
 
   private removeFromQueueByWs(ws: WebSocket) {
     const idx = this.queue.findIndex((q) => q.ws === ws);
-    if (idx >= 0) {
-      this.queue.splice(idx, 1);
-    }
+    if (idx >= 0) this.queue.splice(idx, 1);
   }
 
   private async cancelQueueByWs(ws: WebSocket) {
@@ -327,7 +341,6 @@ export class OnlineMatchmakingService {
   }
 
   private async tryMatch(mode: Mode) {
-    // online_2p = 3 players total (you + 2), online_3p = 4 players total (you + 3)
     const required = mode === "online_2p" ? 3 : 4;
     const entries = this.queue.filter((q) => q.mode === mode);
     if (entries.length < required) return;
@@ -342,25 +355,98 @@ export class OnlineMatchmakingService {
     const modes: Mode[] = ["online_2p", "online_3p"];
 
     for (const mode of modes) {
-      const queueForMode = this.queue
-        .filter((q) => q.mode === mode)
-        .sort((a, b) => a.enqueuedAt - b.enqueuedAt);
-      if (queueForMode.length === 0) continue;
+      const required = mode === "online_2p" ? 3 : 4;
 
-      const oldest = queueForMode[0];
-      if (now - oldest.enqueuedAt < BOT_FILL_TIMEOUT_MS) {
-        continue;
+      // Keep matching until no more expired groups remain for this mode.
+      while (true) {
+        // Re-read the queue each iteration since startMatch may mutate it.
+        const queueForMode = this.queue
+          .filter((q) => q.mode === mode)
+          .sort((a, b) => a.enqueuedAt - b.enqueuedAt);
+
+        if (queueForMode.length === 0) break;
+
+        // Find the oldest player whose personal bot-fill timer has expired.
+        const expiredIdx = queueForMode.findIndex((q) => now >= q.botFillAt);
+        if (expiredIdx < 0) break; // No one has expired yet — stop checking this mode.
+
+        // Take up to `required` humans starting from the first expired player,
+        // preferring those who have been waiting longest.
+        const humanCount = Math.min(required, queueForMode.length);
+        const selected = queueForMode.slice(0, humanCount);
+        selected.forEach((s) => this.removeFromQueueByWs(s.ws));
+
+        try {
+          await this.startMatch(mode, selected, true);
+        } catch (err) {
+          console.error("[matchmaking] startMatch failed:", err);
+        }
+      }
+    }
+  }
+
+  // ── Match lifecycle ──────────────────────────────────────────────────────────
+
+  /**
+   * Random active rows from `bot_profiles`. Prefers names not already at the table
+   * (human display names); may reuse names only if needed to fill seats.
+   */
+  private async fetchBotProfilesForMatch(
+    count: number,
+    usedNames: Set<string>
+  ): Promise<{ name: string; botProfileId: string }[]> {
+    if (count <= 0) return [];
+    try {
+      const db = getDb();
+      const rows = await db
+        .select({ id: botProfiles.id, botName: botProfiles.botName })
+        .from(botProfiles)
+        .where(eq(botProfiles.active, true));
+
+      if (rows.length === 0) return [];
+
+      const shuffled = [...rows];
+      for (let i = shuffled.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
 
-      const required = mode === "online_2p" ? 3 : 4;
-      const humanCount = Math.min(required, queueForMode.length);
-      const selected = queueForMode.slice(0, humanCount);
-      selected.forEach((s) => this.removeFromQueueByWs(s.ws));
-      await this.startMatch(mode, selected, true);
+      const out: { name: string; botProfileId: string }[] = [];
+      const usedIds = new Set<string>();
+
+      for (const r of shuffled) {
+        if (out.length >= count) break;
+        if (usedIds.has(r.id)) continue;
+        if (usedNames.has(r.botName)) continue;
+        usedIds.add(r.id);
+        out.push({ name: r.botName, botProfileId: r.id });
+      }
+
+      for (const r of shuffled) {
+        if (out.length >= count) break;
+        if (usedIds.has(r.id)) continue;
+        usedIds.add(r.id);
+        out.push({ name: r.botName, botProfileId: r.id });
+      }
+
+      return out;
+    } catch {
+      return [];
     }
   }
 
   private async startMatch(mode: Mode, humans: QueueEntry[], allowBots: boolean) {
+    try {
+      await this._startMatchInner(mode, humans, allowBots);
+    } catch (err) {
+      console.error("[matchmaking] _startMatchInner threw — notifying affected clients:", err);
+      for (const h of humans) {
+        send(h.ws, { type: "ONLINE_ERROR", message: "Failed to start match, please re-queue." });
+      }
+    }
+  }
+
+  private async _startMatchInner(mode: Mode, humans: QueueEntry[], allowBots: boolean) {
     const required = mode === "online_2p" ? 3 : 4;
     const matchId = randomUUID();
     const players: OnlinePlayer[] = humans.map((h) => ({
@@ -372,12 +458,26 @@ export class OnlineMatchmakingService {
 
     if (allowBots && players.length < required) {
       const missing = required - players.length;
+      const usedNames = new Set(players.map((p) => p.name));
+      const dbBots = await this.fetchBotProfilesForMatch(missing, usedNames);
+      const bots: { name: string; botProfileId: string | null }[] = dbBots.map((b) => ({
+        name: b.name,
+        botProfileId: b.botProfileId,
+      }));
+      for (const b of dbBots) usedNames.add(b.name);
+      while (bots.length < missing) {
+        const n = pickFallbackBotName(usedNames);
+        usedNames.add(n);
+        bots.push({ name: n, botProfileId: null });
+      }
       for (let i = 0; i < missing; i += 1) {
+        const b = bots[i];
         players.push({
           id: randomUUID(),
           userId: null,
-          name: randomBotName(i),
+          name: b.name,
           isBot: true,
+          botProfileId: b.botProfileId,
         });
       }
     }
@@ -389,7 +489,7 @@ export class OnlineMatchmakingService {
       allowBots && players.some((p) => p.isBot)
     );
 
-    const dbMeta = await this.persistMatch(matchId, mode, players, runtime.isBotFilled);
+    const dbMeta = await this.persistMatch(matchId, mode, players, humans, runtime.isBotFilled);
     if (dbMeta) {
       this.matchMeta.set(matchId, dbMeta);
     }
@@ -406,11 +506,7 @@ export class OnlineMatchmakingService {
         mode,
         isBotFilled: runtime.isBotFilled,
         playerId: client.playerId,
-        players: players.map((p) => ({
-          id: p.id,
-          name: p.name,
-          isBot: p.isBot,
-        })),
+        players: players.map((p) => ({ id: p.id, name: p.name, isBot: p.isBot })),
         state: runtime.state,
       });
     }
@@ -429,15 +525,14 @@ export class OnlineMatchmakingService {
     }
   }
 
+  // ── DB helpers ───────────────────────────────────────────────────────────────
+
   private async ensureRankStats(userId: string, displayName: string) {
     try {
       const db = getDb();
       await db
         .insert(playerRankStats)
-        .values({
-          userId,
-          displayName: displayName || "Player",
-        })
+        .values({ userId, displayName: displayName || "Player" })
         .onConflictDoNothing();
     } catch {
       // ignore in no-db dev mode
@@ -448,10 +543,12 @@ export class OnlineMatchmakingService {
     matchId: string,
     mode: Mode,
     players: OnlinePlayer[],
+    humans: QueueEntry[],
     isBotFilled: boolean
   ): Promise<MatchMeta | null> {
     try {
       const db = getDb();
+
       await db.insert(onlineMatches).values({
         id: matchId,
         mode,
@@ -472,27 +569,57 @@ export class OnlineMatchmakingService {
           slotIndex: i,
           userId: p.userId,
           isBot: p.isBot,
-          botProfileId: null,
+          botProfileId: p.isBot ? (p.botProfileId ?? null) : null,
           joinType: p.isBot ? "bot_timeout_fill" : "human_queue",
           joinedAt: new Date(),
         });
       }
 
-      if (players.some((p) => !p.isBot)) {
+      // ── Fix: scope ticket update to only the matched human ticket IDs ─────────
+      const humanTicketIds = humans.map((h) => h.ticketId).filter(Boolean);
+      if (humanTicketIds.length > 0) {
         await db
           .update(matchmakingTickets)
           .set({ status: "matched", matchedAt: new Date() })
-          .where(
-            and(
-              eq(matchmakingTickets.mode, mode),
-              eq(matchmakingTickets.status, "queued")
-            )
-          );
+          .where(inArray(matchmakingTickets.id, humanTicketIds));
       }
 
-      return { matchId, dbMatchId: matchId, playerDbIds };
+      return { matchId, dbMatchId: matchId, playerDbIds, playerDbIdByRuntime: playerDbIds };
     } catch {
       return null;
+    }
+  }
+
+  /** Persist round-by-round scores to online_match_rounds + online_round_scores. */
+  private async persistRoundHistory(matchId: string, meta: MatchMeta) {
+    const match = this.gameService.getMatch(matchId);
+    if (!match || match.roundHistory.length === 0) return;
+
+    try {
+      const db = getDb();
+      for (const record of match.roundHistory) {
+        const roundDbId = randomUUID();
+        await db.insert(onlineMatchRounds).values({
+          id: roundDbId,
+          matchId,
+          roundNumber: record.roundNumber,
+          startedAt: null,
+          endedAt: record.endedAt,
+        });
+
+        for (const scoreEntry of record.scores) {
+          const dbPlayerId = meta.playerDbIds.get(scoreEntry.playerId);
+          if (!dbPlayerId) continue;
+          await db.insert(onlineRoundScores).values({
+            roundId: roundDbId,
+            matchPlayerId: dbPlayerId,
+            roundScoreDelta: scoreEntry.delta,
+            cumulativeScore: scoreEntry.score,
+          }).onConflictDoNothing();
+        }
+      }
+    } catch {
+      // Non-critical: game is still finalized; round data is analytics only
     }
   }
 
@@ -517,13 +644,16 @@ export class OnlineMatchmakingService {
 
     const winnerScoreX = Math.max(0, Math.min(99, winner.totalScore ?? 0));
 
+    // Persist per-round data before finalizing
+    await this.persistRoundHistory(matchId, meta);
+
     try {
       const db = getDb();
       await db.execute(
         sql`SELECT finalize_online_match(${matchId}::uuid, ${winnerDbPlayerId}::uuid, ${winnerScoreX})`
       );
     } catch {
-      // Fallback to prevent runtime leak if DB finalization fails in dev without DB
+      // Fallback: at least mark match completed so it doesn't stay in_progress
       try {
         const db = getDb();
         await db
@@ -535,6 +665,7 @@ export class OnlineMatchmakingService {
       }
     }
 
+    // Notify all match clients
     for (const client of this.clients.values()) {
       if (client.matchId === matchId) {
         send(client.ws, {
