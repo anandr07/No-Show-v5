@@ -5,7 +5,7 @@ services:
     region: singapore   # closest to India — change to "ohio" (US East) if preferred
     plan: free          # upgrade to "starter" ($7/mo) if you need always-on + WebSocket persistence
 
-    buildCommand: npm install && npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=server_dist
+    buildCommand: npm install --include=dev && npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=server_dist
 
     startCommand: node server_dist/index.js
 
