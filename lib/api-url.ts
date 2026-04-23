@@ -11,7 +11,12 @@ export function getApiUrl(): string {
 
   let host = process.env.EXPO_PUBLIC_DOMAIN ?? "localhost:5000";
 
+  // When running as a web app on localhost (Expo web / browser preview) and
+  // the user has NOT explicitly configured EXPO_PUBLIC_DOMAIN, default to the
+  // local API server. If EXPO_PUBLIC_DOMAIN IS set (e.g. a Render URL) we
+  // always honour it — never override an explicit setting.
   const isWebLocalhost =
+    !process.env.EXPO_PUBLIC_DOMAIN &&
     typeof window !== "undefined" &&
     window?.location?.hostname &&
     (window.location.hostname === "localhost" ||
