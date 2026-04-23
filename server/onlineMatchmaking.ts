@@ -207,6 +207,18 @@ export class OnlineMatchmakingService {
   // ── WebSocket handlers ───────────────────────────────────────────────────────
 
   private handleConnection(ws: WebSocket) {
+    // Keepalive: Render's reverse proxy closes idle WS connections after ~55 s.
+    // Ping every 25 s to keep the connection alive during matchmaking waits.
+    const keepAlive = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.ping();
+      } else {
+        clearInterval(keepAlive);
+      }
+    }, 25_000);
+
+    ws.on("pong", () => { /* connection confirmed alive */ });
+
     ws.on("message", (raw) => {
       try {
         const msg = JSON.parse(raw.toString()) as { type: string; [key: string]: unknown };
@@ -217,6 +229,7 @@ export class OnlineMatchmakingService {
     });
 
     ws.on("close", () => {
+      clearInterval(keepAlive);
       this.removeFromQueueByWs(ws);
       this.clients.delete(ws);
     });

@@ -33,6 +33,10 @@ interface Room {
 const rooms = new Map<string, Room>();
 const ROOM_EMPTY_GRACE_MS = 60_000;
 
+// Render's reverse proxy closes idle WebSocket connections after ~55 s.
+// Sending a native ping frame every 25 s keeps all connections alive.
+const WS_PING_INTERVAL_MS = 25_000;
+
 function broadcast(room: Room, message: object, excludeId?: string) {
   const data = JSON.stringify(message);
   room.players.forEach((p) => {
@@ -101,6 +105,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   wss.on("connection", (ws: WebSocket) => {
     let currentRoomCode: string | null = null;
     let currentPlayerId: string | null = null;
+
+    // Keepalive: ping every 25 s so Render's proxy never marks the socket idle.
+    const keepAlive = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.ping();
+      } else {
+        clearInterval(keepAlive);
+      }
+    }, WS_PING_INTERVAL_MS);
+
+    ws.on("pong", () => { /* connection confirmed alive */ });
 
     ws.on("message", (data: Buffer) => {
       let msg: { type: string; [key: string]: unknown };
@@ -342,6 +357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
 
     ws.on("close", () => {
+      clearInterval(keepAlive);
       if (!currentRoomCode || !currentPlayerId) return;
       const room = rooms.get(currentRoomCode);
       if (!room) return;

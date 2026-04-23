@@ -166,6 +166,12 @@ export function MultiplayerGameProvider({ children }: { children: React.ReactNod
 
   const connectAndSend = useCallback(
     (action: "create" | "join", playerName: string, code?: string) => {
+      // Always close any existing connection before opening a new one so the
+      // server-side room state stays consistent (no stale WS holding a room slot).
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
       try {
         const wsUrl = getWebSocketUrl("/ws");
         const ws = new WebSocket(wsUrl);
