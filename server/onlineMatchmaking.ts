@@ -276,10 +276,9 @@ export class OnlineMatchmakingService {
         return;
       }
       this.broadcastMatchState(client.matchId, result.state);
-      const botTurn = this.gameService.processBotTurns(client.matchId);
-      if (botTurn.progressed && botTurn.finalState) {
-        this.broadcastMatchState(client.matchId, botTurn.finalState);
-      }
+      await this.gameService.processBotTurns(client.matchId, (state) => {
+        this.broadcastMatchState(client.matchId!, state);
+      });
       await this.tryFinalizeMatch(client.matchId);
       return;
     }
@@ -524,10 +523,10 @@ export class OnlineMatchmakingService {
       });
     }
 
-    const botTurn = this.gameService.processBotTurns(matchId);
-    if (botTurn.progressed && botTurn.finalState) {
-      this.broadcastMatchState(matchId, botTurn.finalState);
-    }
+    // If the very first player is a bot, let them play with natural delays.
+    await this.gameService.processBotTurns(matchId, (state) => {
+      this.broadcastMatchState(matchId, state);
+    });
   }
 
   private broadcastMatchState(matchId: string, state: unknown) {

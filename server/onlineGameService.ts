@@ -1,5 +1,5 @@
 import { initMultiplayerGame, applyGameAction, type GameAction } from "./gameState";
-import type { GameState } from "../lib/gameEngine";
+import type { GameState, GamePhase } from "../lib/gameEngine";
 import { decideBotAction } from "./botService";
 
 export interface OnlinePlayer {
@@ -85,22 +85,53 @@ export class OnlineGameService {
     return result;
   }
 
-  processBotTurns(matchId: string): { progressed: boolean; finalState: GameState | null } {
+  /**
+   * Play all consecutive bot sub-turns with human-feeling delays between each
+   * sub-action (pick phase and throw/show phase), mirroring the VS mode timings.
+   *
+   * `onBroadcast` is called after EVERY individual sub-action so clients see
+   * each intermediate state (bot picks a card → pause → bot throws) rather than
+   * one instant jump to the final state.
+   */
+  async processBotTurns(
+    matchId: string,
+    onBroadcast: (state: GameState) => void
+  ): Promise<void> {
     const match = this.matches.get(matchId);
-    if (!match) return { progressed: false, finalState: null };
+    if (!match) return;
 
-    let progressed = false;
+    const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
     let safety = 0;
     while (safety < 24) {
       safety += 1;
-      if (match.state.phase === "gameOver") break;
+
+      // Re-read from map — another async path could have removed the match.
+      if (!this.matches.get(matchId)) return;
+      // Use `as GamePhase` to prevent TypeScript narrowing the union type across
+      // loop iterations and await boundaries, which would cause false TS2367 errors.
+      if ((match.state.phase as GamePhase) === "gameOver" || (match.state.phase as GamePhase) === "show") break;
 
       const current = match.state.players[match.state.currentPlayerIndex];
-      const isBot = match.players.find((p) => p.id === current.id)?.isBot;
       if (!current) break;
+      const isBot = match.players.find((p) => p.id === current.id)?.isBot;
       if (!isBot) break;
 
-      const prevPhase = match.state.phase;
+      // Delay mirrors VS mode timings (GameContext.tsx runBotTurn):
+      //   pick  phase → 800 – 1 400 ms
+      //   throw phase → 1 000 – 1 800 ms
+      const thinkMs =
+        match.state.turnPhase === "pick"
+          ? 800 + Math.random() * 600
+          : 1000 + Math.random() * 800;
+
+      await delay(thinkMs);
+
+      // Guard again after the async pause — match could have been cleaned up.
+      if (!this.matches.get(matchId)) return;
+      if ((match.state.phase as GamePhase) === "gameOver" || (match.state.phase as GamePhase) === "show") break;
+
+      const prevPhase = match.state.phase as GamePhase;
       const prevRound = match.state.round;
 
       const botAction = decideBotAction(match.state, current.id);
@@ -108,9 +139,8 @@ export class OnlineGameService {
 
       const result = applyGameAction(match.state, botAction);
       match.state = result.state;
-      progressed = true;
 
-      // Track bot-triggered round completions too
+      // Track bot-triggered round completions.
       if (
         prevPhase !== "show" &&
         result.state.phase === "show" &&
@@ -123,9 +153,10 @@ export class OnlineGameService {
         });
       }
 
+      // Broadcast this individual sub-action so the client sees it.
+      onBroadcast(result.state);
+
       if (result.error) break;
     }
-
-    return { progressed, finalState: match.state };
   }
 }
