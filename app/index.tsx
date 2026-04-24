@@ -376,6 +376,7 @@ export default function HomeScreen() {
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
   const [playerMenuVisible, setPlayerMenuVisible] = useState(false);
   const { user, isGuest, isLoading: authLoading } = useAuth();
+  const { avatarIndex } = useSettings();
 
   // Only redirect to auth if: loading is done AND no user AND not a guest session.
   useEffect(() => {
