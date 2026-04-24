@@ -516,9 +516,12 @@ export default function HomeScreen() {
               setPlayerMenuVisible((v) => !v);
             }}
           >
-            <View style={styles.playerIconInner}>
-              <Text style={styles.playerIconSymbol}>♠</Text>
-            </View>
+            <PlayerAvatarImage
+              avatarIndex={avatarIndex}
+              size={38}
+              borderColor="rgba(255,215,0,0.55)"
+              backgroundColor="rgba(0,0,0,0.4)"
+            />
           </Pressable>
         </View>
       </Animated.View>
@@ -665,21 +668,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 6,
-  },
-  playerIconInner: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.2)",
-  },
-  playerIconSymbol: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: COLORS.gold,
   },
   playerMenuOverlay: {
     ...StyleSheet.absoluteFillObject,

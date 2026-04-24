@@ -22,6 +22,7 @@ import * as Haptics from "expo-haptics";
 import COLORS from "@/constants/colors";
 import { useSettings } from "@/context/SettingsContext";
 import { playTap } from "@/lib/sound";
+import { PlayerAvatarImage } from "@/components/PlayerAvatarImage";
 
 // ─── Toggle row ───────────────────────────────────────────────────────────────
 
@@ -65,17 +66,22 @@ interface TapRowProps {
   accentColor?: string;
   destructive?: boolean;
   rightNode?: React.ReactNode;
+  leftNode?: React.ReactNode;
 }
 
-function TapRow({ icon, label, subtitle, onPress, accentColor = COLORS.gold, destructive, rightNode }: TapRowProps) {
+function TapRow({ icon, label, subtitle, onPress, accentColor = COLORS.gold, destructive, rightNode, leftNode }: TapRowProps) {
   return (
     <Pressable
       style={({ pressed }) => [row.wrap, pressed && row.pressed, destructive && row.destructiveWrap]}
       onPress={onPress}
     >
-      <View style={[row.iconWrap, destructive ? row.iconDestructive : { backgroundColor: accentColor + "20" }]}>
-        <Ionicons name={icon} size={19} color={destructive ? COLORS.error : accentColor} />
-      </View>
+      {leftNode ? (
+        <View style={row.iconWrap}>{leftNode}</View>
+      ) : (
+        <View style={[row.iconWrap, destructive ? row.iconDestructive : { backgroundColor: accentColor + "20" }]}>
+          <Ionicons name={icon} size={19} color={destructive ? COLORS.error : accentColor} />
+        </View>
+      )}
       <View style={row.text}>
         <Text style={[row.label, destructive && { color: COLORS.error }]}>{label}</Text>
         <Text style={row.sub}>{subtitle}</Text>
@@ -181,6 +187,7 @@ export default function SettingsScreen() {
     setSoundEnabled,
     setHapticsEnabled,
     setNotificationsEnabled,
+    avatarIndex,
   } = useSettings();
 
   const handleSoundToggle = async (value: boolean) => {
@@ -290,6 +297,14 @@ export default function SettingsScreen() {
             label="Profile & Customisation"
             subtitle="Avatar, table theme, card back"
             onPress={() => { playTap(); router.push("/profile"); }}
+            leftNode={
+              <PlayerAvatarImage
+                avatarIndex={avatarIndex}
+                size={34}
+                borderColor="rgba(255,215,0,0.45)"
+                backgroundColor="rgba(0,0,0,0.35)"
+              />
+            }
           />
           <View style={g.separator} />
           <TapRow
